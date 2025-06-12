@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Make Reservation - inetctl</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-900 text-gray-200 font-sans">
+    <div class="container mx-auto p-4 sm:p-6 lg:p-8 max-w-2xl">
+        <h1 class="text-3xl font-bold text-white mb-6">Create Static Reservation</h1>
+        <div class="bg-gray-800 rounded-lg shadow-xl p-6">
+            <form method="POST">
+                <!-- Hidden fields to pass the original lease data -->
+                <input type="hidden" name="mac_address" value="{{ mac }}">
+                <input type="hidden" name="ip_address" value="{{ ip }}">
+                
+                <!-- Display lease info (read-only) -->
+                <div class="mb-6 p-4 bg-black/20 rounded-lg border border-gray-700">
+                    <h3 class="text-lg font-semibold text-gray-300 mb-2">From Active Lease:</h3>
+                    <p class="font-mono text-sm"><strong>IP:</strong> {{ ip }}</p>
+                    <p class="font-mono text-sm"><strong>MAC:</strong> {{ mac }}</p>
+                    <p class="font-mono text-sm"><strong>Hostname:</strong> {{ hostname }}</p>
+                </div>
+
+                <!-- User-provided fields -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label for="host_id" class="block text-sm font-medium text-gray-300 mb-1">Unique Host ID <span class="text-red-500">*</span></label>
+                        <input type="text" name="host_id" id="host_id" placeholder="e.g., living-room-tv" required class="w-full bg-gray-700 border border-gray-600 rounded-md shadow-sm">
+                    </div>
+                    <div>
+                        <label for="vlan_id" class="block text-sm font-medium text-gray-300 mb-1">VLAN ID <span class="text-red-500">*</span></label>
+                        <input type="number" name="vlan_id" id="vlan_id" placeholder="e.g., 10" required class="w-full bg-gray-700 border border-gray-600 rounded-md shadow-sm">
+                    </div>
+                    <div class="md:col-span-2">
+                        <label for="desired_hostname" class="block text-sm font-medium text-gray-300 mb-1">Permanent Hostname</label>
+                        <input type="text" name="desired_hostname" id="desired_hostname" class="w-full bg-gray-700 border border-gray-600 rounded-md shadow-sm" value="{{ hostname }}">
+                    </div>
+                </div>
+                <div class="mt-8 flex justify-end space-x-4">
+                    <a href="{{ url_for('home') }}" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg">Cancel</a>
+                    <button type="submit" class="bg-teal-600 hover:bg-teal-700 text-white font-bold py-2 px-4 rounded-lg">Save Reservation</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</body>
+</html>

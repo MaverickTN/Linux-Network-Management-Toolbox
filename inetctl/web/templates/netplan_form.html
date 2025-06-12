@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Edit Netplan Interface - inetctl</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-900 text-gray-200 font-sans">
+    <div class="container mx-auto p-4 sm:p-6 lg:p-8 max-w-4xl">
+        <div class="flex justify-between items-center mb-6">
+            <h1 class="text-3xl font-bold text-white">Edit: <span class="text-cyan-400 font-mono">{{ iface.interface }}</span></h1>
+            <a href="{{ url_for('networks_list') }}" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg">Back to Networks</a>
+        </div>
+
+        <!-- Main Interface Details Form -->
+        <div class="bg-gray-800 rounded-lg shadow-xl p-6 mb-8">
+            <h2 class="text-xl font-semibold mb-4">Interface Details</h2>
+            <form method="POST" action="{{ url_for('netplan_edit', section=iface.section, file_b64=iface.file_b64, interface=iface.interface) }}">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label for="addresses" class="block text-sm font-medium text-gray-300 mb-1">Addresses (comma separated)</label>
+                        <input type="text" name="addresses" id="addresses" class="w-full bg-gray-700 border border-gray-600 text-white rounded-md" value="{{ iface.addresses|join(', ') }}">
+                    </div>
+                    <div class="flex items-end space-x-8">
+                        <div class="flex items-center">
+                            <input type="checkbox" name="dhcp4" id="dhcp4" class="h-4 w-4 rounded" {% if iface.dhcp4 %}checked{% endif %}>
+                            <label for="dhcp4" class="ml-2">DHCP4</label>
+                        </div>
+                        <div class="flex items-center">
+                            <input type="checkbox" name="dhcp6" id="dhcp6" class="h-4 w-4 rounded" {% if iface.dhcp6 %}checked{% endif %}>
+                            <label for="dhcp6" class="ml-2">DHCP6</label>
+                        </div>
+                    </div>
+                </div>
+                <div class="mt-6 flex justify-end">
+                    <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg">Save Interface Changes</button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Routes Section -->
+        <div class="bg-gray-800 rounded-lg shadow-xl p-6">
+            <h2 class="text-xl font-semibold mb-4">Static Routes</h2>
+            <!-- List Existing Routes -->
+            <div class="mb-6">
+                {% if iface.raw.get('routes') %}
+                    <ul class="divide-y divide-gray-700">
+                    {% for route in iface.raw.routes %}
+                        <li class="py-3 flex justify-between items-center">
+                            <div>
+                                <p class="font-mono text-lg">To: <span class="text-green-400">{{ route.to }}</span></p>
+                                <p class="font-mono text-sm text-gray-400">
+                                    {% if route.via %}
+                                        Via: <span class="text-yellow-400">{{ route.via }}</span>
+                                    {% elif route['on-link'] %}
+                                        <span class="text-purple-400">On-Link</span>
+                                    {% endif %}
+                                </p>
+                            </div>
+                            <form method="POST" action="{{ url_for('netplan_route_delete', section=iface.section, file_b64=iface.file_b64, interface=iface.interface) }}" onsubmit="return confirm('Delete this route?');">
+                                <input type="hidden" name="to" value="{{ route.to }}">
+                                <input type="hidden" name="via" value="{{ route.via if route.via else '' }}">
+                                <button type="submit" class="bg-red-600 hover:bg-red-700 text-white font-bold py-1 px-3 rounded-lg">Delete</button>
+                            </form>
+                        </li>
+                    {% endfor %}
+                    </ul>
+                {% else %}
+                    <p class="text-gray-400">No static routes defined for this interface.</p>
+                {% endif %}
+            </div>
+            
+            <!-- Add New Route Form -->
+            <div class="border-t border-gray-700 pt-6">
+                <h3 class="text-lg font-semibold mb-4">Add New Route</h3>
+                <form method="POST" action="{{ url_for('netplan_route_add', section=iface.section, file_b64=iface.file_b64, interface=iface.interface) }}" class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                    <div>
+                        <label for="to" class="block text-sm font-medium">To (CIDR)</label>
+                        <input type="text" name="to" id="to" placeholder="e.g., 10.0.0.0/8" required class="w-full bg-gray-700 border border-gray-600 rounded-md">
+                    </div>
+                    <div>
+                        <label for="via" class="block text-sm font-medium">Via (Gateway)</label>
+                        <input type="text" name="via" id="via" placeholder="e.g., 192.168.1.254" class="w-full bg-gray-700 border border-gray-600 rounded-md">
+                    </div>
+                    <div class="flex items-center space-x-4">
+                        <div class="flex items-center">
+                            <input type="checkbox" name="on_link" id="on_link" class="h-4 w-4 rounded">
+                            <label for="on_link" class="ml-2">On-Link</label>
+                        </div>
+                        <button type="submit" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg w-full">Add Route</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
