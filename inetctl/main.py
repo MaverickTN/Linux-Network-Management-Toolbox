@@ -1,7 +1,7 @@
 import typer
 
 # Import the Typer "app" objects from each of our CLI modules
-from inetctl.cli import access, config, dnsmasq, network, shorewall, show, tc
+from inetctl.cli import access, config, dnsmasq, network, shorewall, show, tc, schedule
 from inetctl.core.config_loader import find_config_file
 from inetctl.web.app import app as flask_app
 
@@ -20,6 +20,7 @@ app.add_typer(network.app)
 app.add_typer(shorewall.app)
 app.add_typer(tc.app)
 app.add_typer(access.app)
+app.add_typer(schedule.app)
 
 # --- Web Portal Command ---
 web_app = typer.Typer(
