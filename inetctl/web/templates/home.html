@@ -46,12 +46,6 @@
                 margin-bottom: 0;
             }
 
-        .card-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
         .schedule-icon {
             font-size: 0.9em;
             cursor: help;
@@ -84,26 +78,25 @@
                 opacity: 1;
                 visibility: visible;
             }
+
+        nav {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
     </style>
 </head>
 <body>
     <main class="container">
-        <header>
-            <nav>
-                <ul>
-                    <li><a href="{{ url_for('home') }}"><strong>inetctl Dashboard</strong></a></li>
-                </ul>
-                <ul>
-                    <li><a href="{{ url_for('logs') }}" role="button" class="secondary outline">Event Logs</a></li>
-                </ul>
-            </nav>
-            <h1>Dashboard</h1>
-        </header>
+        <nav>
+            <ul><li><a href="{{ url_for('home') }}"><h1>inetctl</h1></a></li></ul>
+            <ul><li><a href="{{ url_for('logs') }}" role="button" class="secondary outline">Event Logs</a></li></ul>
+        </nav>
 
         {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
         {% for category, message in messages %}
-        <div class="notice {{ 'error' if category == 'error' else '' }}"><p>{{ message }}</p></div>
+        <div class="notice {% if category == 'error' %}warning{% endif %}"><p>{{ message }}</p></div>
         {% endfor %}
         {% endif %}
         {% endwith %}
@@ -121,11 +114,8 @@
         </details>
 
         <tabs>
-            {% for vlan_id, hosts in hosts_by_vlan.items() %}
-            <tab {% if loop.first %}active{% endif %}>{{ network_map[vlan_id] }}</tab>
-            {% endfor %}
+            {% for vlan_id, hosts in hosts_by_vlan.items() %}<tab {% if loop.first %}active{% endif %}>{{ network_map[vlan_id] }}</tab>{% endfor %}
         </tabs>
-
         <div class="tab-contents">
             {% for vlan_id, hosts in hosts_by_vlan.items() %}
             <div class="tab-content" {% if loop.first %}style="display: block;" {% endif %}>
@@ -141,40 +131,30 @@
                                 <strong>{{ host.description }}</strong>
                                 <small style="display: block; color: var(--pico-muted-color);">
                                     {{ host.hostname }}
-                                    {% if host.get('schedule') and host.schedule.get('enabled') %}
-                                    <span class="schedule-icon" data-tooltip="Schedule: {{ host.schedule.start_time }}-{{ host.schedule.end_time }} ({{ host.schedule.days|join(', ') }})">🕒</span>
-                                    {% endif %}
+                                    {% if host.get('schedule') and host.schedule.get('enabled') %}<span class="schedule-icon" data-tooltip="Schedule: {{ host.schedule.start_time }}-{{ host.schedule.end_time }} ({{ host.schedule.days|join(', ') }})">🕒</span>{% endif %}
                                 </small>
                             </td>
                             <td><small>{{ host.mac }}<br>{{ host.ip_assignment.ip if host.ip_assignment.ip else 'DHCP' }}</small></td>
                             <td class="host-actions"><a href="{{ url_for('edit_host', host_mac=host.mac) }}" role="button" class="secondary outline">Edit</a></td>
                         </tr>
                         {% else %}
-                        <tr><td colspan="4">No hosts configured in this network.</td></tr>
-                        {% endfor %}
+                        <tr><td colspan="4">No hosts configured in this network.</td></tr>{% endfor %}
                     </tbody>
                 </table>
             </div>
             {% endfor %}
         </div>
-
     </main>
 
     <dialog id="add-host-modal">
         <article>
-            <header>
-                <a href="#close" aria-label="Close" class="close" data-target="add-host-modal" onClick="toggleModal(event)"></a>
-                <strong>Add New Host</strong>
-            </header>
+            <header><a href="#close" aria-label="Close" class="close" data-target="add-host-modal" onClick="toggleModal(event)"></a><strong>Add New Host</strong></header>
             <form action="{{ url_for('add_host') }}" method="post">
                 <label for="mac">MAC Address (required)</label><input type="text" id="mac" name="mac" required>
                 <label for="hostname">Hostname</label><input type="text" id="hostname" name="hostname">
                 <label for="description">Description</label><input type="text" id="description" name="description">
                 <label for="vlan_id">Assign to Network (VLAN)</label>
-                <select id="vlan_id" name="vlan_id">
-                    {% for network in networks %}
-                    <option value="{{ network.id }}">{{ network.name }}</option>{% endfor %}
-                </select>
+                <select id="vlan_id" name="vlan_id">{% for network in networks %}<option value="{{ network.id }}">{{ network.name }}</option>{% endfor %}</select>
                 <footer><button type="submit">Save Host</button></footer>
             </form>
         </article>
@@ -182,21 +162,18 @@
 
     <script>
         document.addEventListener('DOMContentLoaded', () => {
-            const tabs = document.querySelectorAll('tabs tab');
-            const tabContents = document.querySelectorAll('.tab-content');
+            const tabs = document.querySelectorAll('tabs tab'); const tabContents = document.querySelectorAll('.tab-content');
             tabs.forEach((tab, index) => {
                 tab.addEventListener('click', () => {
-                    tabs.forEach(t => t.removeAttribute('active'));
-                    tab.setAttribute('active', '');
-                    tabContents.forEach(content => content.style.display = 'none');
-                    tabContents[index].style.display = 'block';
+                    tabs.forEach(t => t.removeAttribute('active')); tab.setAttribute('active', '');
+                    tabContents.forEach(content => content.style.display = 'none'); tabContents[index].style.display = 'block';
                 });
             });
         });
         const toggleModal = (event) => {
-          event.preventDefault();
-          const modal = document.getElementById(event.currentTarget.dataset.target);
-          if (modal) { modal.open = !modal.open }
+            event.preventDefault();
+            const modal = document.getElementById(event.currentTarget.dataset.target);
+            if (modal) { modal.open = !modal.open }
         }
     </script>
 </body>

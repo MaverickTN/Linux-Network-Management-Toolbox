@@ -2,20 +2,14 @@ import sqlite3
 import time
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
 from pathlib import Path
-<<<<<<< HEAD
 from datetime import datetime
 
 from inetctl.core.config_loader import load_config, save_config
-=======
-
-from inetctl.core.config_loader import load_config, save_config, find_config_file
->>>>>>> 56ba8a02a857fb3dba5cc9bcb212e1a383e96349
 from inetctl.core.utils import (
     get_host_by_mac,
     run_command,
     check_multiple_hosts_online
 )
-<<<<<<< HEAD
 from inetctl.core.logger import log_event
 
 DB_FILE = Path("./inetctl_stats.db")
@@ -23,20 +17,11 @@ DB_FILE = Path("./inetctl_stats.db")
 app = Flask(__name__)
 app.secret_key = 'super-secret-key-change-me' 
 
-=======
-
-DB_FILE = Path("./inetctl_stats.db")
-
-app = Flask(__name__)
-app.secret_key = 'super-secret-key-change-me' # It's okay for local-only app
-
->>>>>>> 56ba8a02a857fb3dba5cc9bcb212e1a383e96349
 def get_db_connection():
     conn = sqlite3.connect(DB_FILE)
     conn.row_factory = sqlite3.Row
     return conn
 
-<<<<<<< HEAD
 @app.template_filter('format_datetime')
 def format_datetime_filter(unix_timestamp):
     """Jinja2 filter to format a Unix timestamp into a readable string."""
@@ -44,22 +29,12 @@ def format_datetime_filter(unix_timestamp):
         return 'N/A'
     return datetime.fromtimestamp(unix_timestamp).strftime('%Y-%m-%d %H:%M:%S')
 
-=======
->>>>>>> 56ba8a02a857fb3dba5cc9bcb212e1a383e96349
 @app.route('/')
 def home():
     config = load_config()
     all_hosts = config.get("known_hosts", [])
     networks = config.get("networks", [])
-<<<<<<< HEAD
     network_map = {net['id']: net['name'] for net in networks}
-=======
-    
-    # Create a mapping of vlan_id to network name for easy lookup
-    network_map = {net['id']: net['name'] for net in networks}
-    
-    # Group hosts by VLAN
->>>>>>> 56ba8a02a857fb3dba5cc9bcb212e1a383e96349
     hosts_by_vlan = {net['id']: [] for net in networks}
     unassigned_hosts = []
 
@@ -74,23 +49,14 @@ def home():
          hosts_by_vlan['unassigned'] = unassigned_hosts
          network_map['unassigned'] = 'Unassigned'
          
-<<<<<<< HEAD
     ips_to_ping = [h['ip_assignment']['ip'] for h in all_hosts if h.get('ip_assignment', {}).get('ip')]
     online_statuses = check_multiple_hosts_online(ips_to_ping)
     
-=======
-    # Check online status concurrently
-    ips_to_ping = [h['ip_assignment']['ip'] for h in all_hosts if h.get('ip_assignment', {}).get('ip')]
-    online_statuses = check_multiple_hosts_online(ips_to_ping)
-    
-    # Add online status to each host dict
->>>>>>> 56ba8a02a857fb3dba5cc9bcb212e1a383e96349
     for vlan_id in hosts_by_vlan:
         for host in hosts_by_vlan[vlan_id]:
              ip = host.get('ip_assignment', {}).get('ip')
              host['is_online'] = online_statuses.get(ip, False)
 
-<<<<<<< HEAD
     return render_template('home.html', hosts_by_vlan=hosts_by_vlan, network_map=network_map, networks=networks)
 
 @app.route('/logs')
@@ -109,15 +75,17 @@ def logs():
 
     if start_time_str:
         try:
+            # Add seconds to the format string for parsing
             start_ts = int(datetime.strptime(start_time_str, '%Y-%m-%dT%H:%M:%S').timestamp())
-        except ValueError:
-            pass # Use default if format is bad
+        except (ValueError, TypeError):
+            pass
 
     if end_time_str:
         try:
+            # Add seconds to the format string for parsing
             end_ts = int(datetime.strptime(end_time_str, '%Y-%m-%dT%H:%M:%S').timestamp())
-        except ValueError:
-            pass # Use default if format is bad
+        except (ValueError, TypeError):
+            pass
 
     query += " WHERE timestamp BETWEEN ? AND ? ORDER BY timestamp DESC"
     params.extend([start_ts, end_ts])
@@ -125,31 +93,20 @@ def logs():
     log_entries = conn.execute(query, params).fetchall()
     conn.close()
     
-    return render_template('logs.html', logs=log_entries)
-=======
-    return render_template(
-        'home.html',
-        hosts_by_vlan=hosts_by_vlan,
-        network_map=network_map,
-        networks=networks # For the "Add Host" modal
-    )
->>>>>>> 56ba8a02a857fb3dba5cc9bcb212e1a383e96349
+    # Pass the current filter values back to the template to pre-fill the form
+    return render_template('logs.html', logs=log_entries, start_time_val=start_time_str, end_time_val=end_time_str)
 
 @app.route('/host/edit/<host_mac>', methods=['GET', 'POST'])
 def edit_host(host_mac):
     config = load_config()
-<<<<<<< HEAD
     host, index = get_host_by_mac(config, host_mac)
-=======
-    host, index = get_host_by_mac(config, host_mac) # CORRECTED FUNCTION CALL
->>>>>>> 56ba8a02a857fb3dba5cc9bcb212e1a383e96349
     if host is None:
         flash(f'Host with MAC {host_mac} not found.', 'error')
         return redirect(url_for('home'))
 
     if request.method == 'POST':
-<<<<<<< HEAD
-        host['description'] = request.form['description']
+        hostname = request.form['description']
+        host['description'] = hostname
         host['vlan_id'] = request.form['vlan_id']
 
         if 'ip_assignment.ip' in request.form and request.form['ip_assignment.ip']:
@@ -160,28 +117,8 @@ def edit_host(host_mac):
         host['network_access_blocked'] = 'network_access_blocked' in request.form
         
         save_config(config)
-        log_event("INFO", "web:host", f"Host configuration updated for {host.get('hostname', host_mac)}.")
-=======
-        # Update basic info
-        host['description'] = request.form['description']
-        host['vlan_id'] = request.form['vlan_id']
-
-        # Update IP assignment
-        if 'ip_assignment.ip' in request.form and request.form['ip_assignment.ip']:
-            host['ip_assignment'] = {
-                'type': 'static',
-                'ip': request.form['ip_assignment.ip']
-            }
-        else: # Revert to DHCP
-             host['ip_assignment'] = {'type': 'dhcp'}
-
-
-        # Update block status
-        host['network_access_blocked'] = 'network_access_blocked' in request.form
-        
-        save_config(config)
->>>>>>> 56ba8a02a857fb3dba5cc9bcb212e1a383e96349
-        flash(f'Host {host.get("hostname", host_mac)} updated successfully!', 'success')
+        log_event("INFO", "web:host", f"Host configuration updated for {hostname}.")
+        flash(f'Host {hostname} updated successfully!', 'success')
         return redirect(url_for('home'))
 
     networks = config.get("networks", [])
@@ -191,7 +128,6 @@ def edit_host(host_mac):
 def add_host():
     config = load_config()
     mac = request.form.get('mac', '').lower().strip()
-<<<<<<< HEAD
     hostname = request.form.get('hostname', '(unknown)').strip()
     
     if not mac:
@@ -232,72 +168,17 @@ def delete_host(host_mac):
 @app.route('/host/sync-firewall', methods=['POST'])
 def sync_firewall():
     log_event("INFO", "web:sync", "Firewall synchronization triggered from web UI.")
-=======
-    
-    if not mac:
-        flash('MAC address is required.', 'error')
-        return redirect(url_for('home'))
-
-    existing_host, _ = get_host_by_mac(config, mac) # CORRECTED FUNCTION CALL
-    if existing_host:
-        flash(f'Host with MAC {mac} already exists.', 'error')
-        return redirect(url_for('home'))
-
-    new_host = {
-        "mac": mac,
-        "hostname": request.form.get('hostname', '(unknown)').strip(),
-        "description": request.form.get('description', '').strip(),
-        "vlan_id": request.form.get('vlan_id'),
-        "ip_assignment": {'type': 'dhcp'},
-        "network_access_blocked": False
-    }
-    
-    if "known_hosts" not in config:
-        config["known_hosts"] = []
-        
-    config['known_hosts'].append(new_host)
-    config['known_hosts'] = sorted(config['known_hosts'], key=lambda x: x.get('hostname', 'z'))
-    
-    save_config(config)
-    flash(f"Host {mac} added successfully.", 'success')
-    return redirect(url_for('home'))
-    
-@app.route('/host/delete/<host_mac>', methods=['POST'])
-def delete_host(host_mac):
-    config = load_config()
-    host, index = get_host_by_mac(config, host_mac) # CORRECTED FUNCTION CALL
-    
-    if index is not None:
-        config['known_hosts'].pop(index)
-        save_config(config)
-        flash(f'Host {host_mac} has been deleted.', 'success')
-    else:
-        flash(f'Host {host_mac} not found.', 'error')
-        
-    return redirect(url_for('home'))
-
-@app.route('/host/sync-firewall', methods=['POST'])
-def sync_firewall():
-    # Use the CLI command as the single source of truth for this action
->>>>>>> 56ba8a02a857fb3dba5cc9bcb212e1a383e96349
     result = run_command(["./inetctl-runner.py", "shorewall", "sync"])
     if result['returncode'] == 0:
         flash('Firewall synchronization successful!', 'success')
     else:
-<<<<<<< HEAD
         log_event("ERROR", "web:sync", f"Firewall sync failed: {result['stderr']}")
-=======
->>>>>>> 56ba8a02a857fb3dba5cc9bcb212e1a383e96349
         flash(f"Firewall sync failed: {result['stderr']}", 'error')
     return redirect(url_for('home'))
     
 @app.route('/data/bandwidth/<host_id>')
 def get_bandwidth_data(host_id):
     conn = get_db_connection()
-<<<<<<< HEAD
-=======
-    # Get the last 5 minutes of data
->>>>>>> 56ba8a02a857fb3dba5cc9bcb212e1a383e96349
     time_threshold = int(time.time()) - (5 * 60)
     readings = conn.execute(
         'SELECT timestamp, rate_in, rate_out FROM bandwidth WHERE host_id = ? AND timestamp > ? ORDER BY timestamp ASC', 
@@ -305,12 +186,7 @@ def get_bandwidth_data(host_id):
     ).fetchall()
     conn.close()
     
-<<<<<<< HEAD
     labels = [datetime.fromtimestamp(r['timestamp']).strftime('%H:%M:%S') for r in readings]
-=======
-    # Format for chart.js
-    labels = [time.strftime('%H:%M:%S', time.localtime(r['timestamp'])) for r in readings]
->>>>>>> 56ba8a02a857fb3dba5cc9bcb212e1a383e96349
     data_in = [r['rate_in'] for r in readings]
     data_out = [r['rate_out'] for r in readings]
     

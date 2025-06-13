@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>inetctl Event Log</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css" />
+    <style>
+        body {
+            padding-bottom: 5em;
+        }
+
+        .filter-form {
+            display: grid;
+            grid-template-columns: 1fr 1fr auto;
+            gap: 1rem;
+            align-items: flex-end;
+            margin-bottom: 2rem;
+        }
+
+        .log-level-info {
+            font-weight: bold;
+        }
+
+        .log-level-warning {
+            color: var(--pico-color-amber-550);
+            font-weight: bold;
+        }
+
+        .log-level-error {
+            color: var(--pico-color-red-600);
+            font-weight: bold;
+        }
+
+        .log-table {
+            --pico-font-size: 0.9em;
+        }
+
+        nav {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+    </style>
+</head>
+<body>
+    <main class="container">
+        <nav>
+            <ul><li><a href="{{ url_for('home') }}"><h1>inetctl</h1></a></li></ul>
+            <ul><li><a href="{{ url_for('logs') }}" role="button">Event Logs</a></li></ul>
+        </nav>
+
+        <h2>Event Log Viewer</h2>
+
+        <form action="{{ url_for('logs') }}" method="get">
+            <fieldset class="filter-form">
+                <label for="start_time">
+                    Start Time
+                    <input type="datetime-local" id="start_time" name="start_time" value="{{ start_time_val or '' }}" step="1">
+                </label>
+                <label for="end_time">
+                    End Time
+                    <input type="datetime-local" id="end_time" name="end_time" value="{{ end_time_val or '' }}" step="1">
+                </label>
+                <button type="submit">Filter</button>
+            </fieldset>
+        </form>
+
+        <figure>
+            <table class="log-table" role="grid">
+                <thead><tr><th>Timestamp</th><th>Level</th><th>Source</th><th>Message</th></tr></thead>
+                <tbody>
+                    {% for log in logs %}
+                    <tr>
+                        <td><small>{{ log.timestamp | format_datetime }}</small></td>
+                        <td><span class="log-level-{{ log.level.lower() }}">{{ log.level }}</span></td>
+                        <td><small>{{ log.source }}</small></td>
+                        <td>{{ log.message }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="4" style="text-align: center;">No logs found for the selected time window.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </figure>
+    </main>
+</body>
+</html>
