@@ -43,12 +43,8 @@ def sync_shorewall():
     ips_to_remove = live_blocked_ips - desired_blocked_ips
 
     if not ips_to_add and not ips_to_remove:
-        # We don't echo or log here because it's called every minute by `schedule:apply`.
-        # Logging this would create too much noise. The calling function logs what matters.
         return
 
-    # The calling function (e.g., from web UI or schedule:apply) is responsible
-    # for logging the start and end of this process. This command just does the work.
     for ip in ips_to_add:
         run_command(["sudo", "shorewall", "reject", ip])
 
@@ -56,10 +52,8 @@ def sync_shorewall():
         run_command(["sudo", "shorewall", "allow", ip])
     
 @app.command(name="apply-config")
-def apply_shorewall_full_config(
-    force_reload: bool = typer.Option(False, "--force", "-f", help="Force a 'shorewall reload' even if files are unchanged.")
-):
-    """Generates all Shorewall config files from server_config.json and reloads if needed."""
+def apply_shorewall_full_config(force_reload: bool = typer.Option(False, "--force", "-f", help="Force a 'shorewall reload' even if files are unchanged.")):
+    """Generates all Shorewall config files and reloads if needed."""
     cli_user = getpass.getuser()
     log_event("INFO", "cli:shorewall:apply", "User triggered full Shorewall config apply.", username=cli_user)
     check_root_privileges("apply full Shorewall configuration")
@@ -69,7 +63,8 @@ def apply_shorewall_full_config(
     policy_content = generate_policy_rules(config)
     accounting_content = generate_accounting_rules(config)
     mangle_content = generate_mangle_rules(config)
-    policy_changed = apply_shorewall_config("/etc/shorewall/policy", policy_content)
+
+    policy_changed = apply_shorewall_config("/etc/shorewall/policy", policy_content, managed_block_name="POLICY")
     accounting_changed = apply_shorewall_config("/etc/shorewall/accounting", accounting_content)
     mangle_changed = apply_shorewall_config("/etc/shorewall/mangle", mangle_content)
 
