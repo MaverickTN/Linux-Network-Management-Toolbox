@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import List, Optional
 
 from inetctl.core.config_loader import load_config, save_config, find_config_file
-from inetctl.core.utils import run_command, get_host_by_mac  # <-- THIS LINE IS CORRECTED
+from inetctl.core.utils import run_command, get_host_by_mac, get_active_leases
 
 app = typer.Typer(
     name="schedule",
@@ -99,7 +99,7 @@ def apply():
 
 @app.command(name="set")
 def set_schedule(
-    mac: str = typer.Argument(..., help="The MAC address of the host."),
+    mac: str = typer.Argument(..., help="The MAC address of the host. Can be from a new device with an active lease."),
     start_time: Optional[str] = typer.Option(None, "--start", help="Schedule start time (HH:MM)."),
     end_time: Optional[str] = typer.Option(None, "--end", help="Schedule end time (HH:MM)."),
     days: Optional[str] = typer.Option(None, "--days", help="Comma-separated days (mon,tue,wed,thu,fri,sat,sun)."),
@@ -109,20 +109,57 @@ def set_schedule(
 ):
     """
     Create, update, or remove an access schedule for a host.
+    If the host is not in the config, it will be added from active leases.
     """
     config = load_config()
-    host, _ = get_host_by_mac(config, mac)
+    mac_lower = mac.lower()
+    host, _ = get_host_by_mac(config, mac_lower)
+
     if not host:
-        typer.echo(f"Error: Host with MAC address {mac} not found.", err=True)
-        raise typer.Exit(code=1)
+        typer.echo(f"Host with MAC address {mac_lower} not found in config file.")
+        typer.echo("Searching for an active lease...")
+        
+        leases_file = config.get("global_settings", {}).get("dnsmasq_leases_file")
+        if not leases_file:
+            typer.echo("Error: 'dnsmasq_leases_file' not defined in config global_settings.", err=True)
+            raise typer.Exit(code=1)
+            
+        active_leases = get_active_leases(leases_file)
+        lease_info = next((lease for lease in active_leases if lease['mac'] == mac_lower), None)
+
+        if not lease_info:
+            typer.echo(f"Error: Could not find an active lease for {mac_lower} either. Please ensure device is on the network.", err=True)
+            raise typer.Exit(code=1)
+
+        typer.echo(typer.style(f"Found active lease for hostname '{lease_info['hostname']}'. Automatically creating a new host entry.", fg=typer.colors.YELLOW))
+
+        # Find a suitable default VLAN ID (purpose: lan, or the first one available)
+        networks = config.get("networks", [])
+        default_vlan_id = None
+        if networks:
+            lan_network = next((net for net in networks if net.get("purpose") == "lan"), None)
+            default_vlan_id = lan_network['id'] if lan_network else networks[0]['id']
+
+        host = {
+            "mac": mac_lower,
+            "hostname": lease_info['hostname'],
+            "description": f"Auto-added by schedule command on {datetime.now().strftime('%Y-%m-%d')}",
+            "vlan_id": default_vlan_id,
+            "ip_assignment": {"type": "dhcp"},
+            "network_access_blocked": False
+        }
+        config.setdefault("known_hosts", []).append(host)
+        # Sort hosts by hostname for consistency
+        config["known_hosts"] = sorted(config["known_hosts"], key=lambda h: h.get('hostname', 'z').lower())
+
 
     if remove:
         if "schedule" in host:
             del host["schedule"]
             save_config(config)
-            typer.echo(f"Successfully removed schedule for host {mac}.")
+            typer.echo(f"Successfully removed schedule for host {mac_lower}.")
         else:
-            typer.echo(f"No schedule found for host {mac}. Nothing to remove.")
+            typer.echo(f"No schedule found for host {mac_lower}. Nothing to remove.")
         raise typer.Exit()
 
     # Get or create the schedule object
@@ -142,30 +179,26 @@ def set_schedule(
             datetime.strptime(start_time, "%H:%M")
             schedule["start_time"] = start_time
         except ValueError:
-            typer.echo("Error: Invalid start_time format. Use HH:MM.", err=True)
-            raise typer.Exit(code=1)
+            typer.echo("Error: Invalid start_time format. Use HH:MM.", err=True); raise typer.Exit(code=1)
 
     if end_time is not None:
         try:
             datetime.strptime(end_time, "%H:%M")
             schedule["end_time"] = end_time
         except ValueError:
-            typer.echo("Error: Invalid end_time format. Use HH:MM.", err=True)
-            raise typer.Exit(code=1)
+            typer.echo("Error: Invalid end_time format. Use HH:MM.", err=True); raise typer.Exit(code=1)
 
     if days is not None:
-        day_list = [d.strip().lower() for d in days.split(',')]
+        day_list = [d.strip().lower() for d in days.split(',') if d.strip()]
         if not all(d in VALID_DAYS for d in day_list):
-            typer.echo(f"Error: Invalid day specified. Use comma-separated values from: {', '.join(VALID_DAYS.keys())}", err=True)
-            raise typer.Exit(code=1)
+            typer.echo(f"Error: Invalid day. Use: {', '.join(VALID_DAYS.keys())}", err=True); raise typer.Exit(code=1)
         schedule["days"] = sorted(list(set(day_list)), key=lambda d: VALID_DAYS[d])
 
-    # This handles the bool flag correctly
     schedule["block_during_schedule"] = block_during
 
     if enable is not None:
         schedule["enabled"] = enable
 
     save_config(config)
-    typer.echo(typer.style(f"Successfully updated schedule for host {mac}.", fg=typer.colors.GREEN))
+    typer.echo(typer.style(f"Successfully updated schedule for host {mac_lower}.", fg=typer.colors.GREEN))
     typer.echo(json.dumps(schedule, indent=2))
