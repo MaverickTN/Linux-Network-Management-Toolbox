@@ -4,8 +4,8 @@ import subprocess
 from datetime import datetime
 from typing import List, Optional
 
-from inetctl.core.config_loader import load_config, save_config, find_config_file, get_host_by_mac
-from inetctl.core.utils import run_command
+from inetctl.core.config_loader import load_config, save_config, find_config_file
+from inetctl.core.utils import run_command, get_host_by_mac  # <-- THIS LINE IS CORRECTED
 
 app = typer.Typer(
     name="schedule",
