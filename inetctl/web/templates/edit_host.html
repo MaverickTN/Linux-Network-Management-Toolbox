@@ -15,16 +15,21 @@
             grid-template-columns: 1fr 1fr;
             gap: 1rem;
         }
+
+        nav {
+            display: flex;
+            align-items: center;
+        }
     </style>
 </head>
 <body>
     <main class="container">
         <header>
             <nav>
-                <ul><li><a href="{{ url_for('home') }}">← Back to Dashboard</a></li></ul>
+                <ul><li><a href="{{ url_for('home') }}" class="secondary">← Back to Dashboard</a></li></ul>
             </nav>
             <h1>Edit Host</h1>
-            <p>Editing configuration for <strong>{{ host.hostname }}</strong> ({{ host.mac }})</p>
+            <p>Editing configuration for <strong>{{ host.description | e }}</strong> (<code>{{ host.mac }}</code>)</p>
         </header>
 
         <article>
@@ -39,6 +44,7 @@
                 <label for="vlan_id">Assigned Network (VLAN)</label>
                 <select id="vlan_id" name="vlan_id">
                     {% for network in networks %}
+                    <!-- THIS IS THE CORRECTED LINE -->
                     <option value="{{ network.id }}" {% if host.vlan_id= =network.id %}selected{% endif %}>
                         {{ network.name }}
                     </option>
@@ -61,12 +67,11 @@
 
             <hr>
 
-            <form class="delete-form" action="{{ url_for('delete_host', host_mac=host.mac) }}" method="post" onsubmit="return confirm('WARNING: This will permanently delete the host from your configuration. Are you absolutely sure?');">
+            <form class="delete-form" action="{{ url_for('delete_host', host_mac=host.mac) }}" method="post" onsubmit="return confirm('WARNING: This will permanently delete this host from your configuration. This cannot be undone. Are you absolutely sure?');">
                 <button type="submit" class="contrast outline">Delete This Host</button>
             </form>
 
         </article>
-
     </main>
 </body>
 </html>
