@@ -53,13 +53,6 @@ def check_root_privileges(action: str = "perform this action"):
 def get_host_by_mac(config: Dict, mac_address: str) -> Tuple[Optional[Dict], Optional[int]]:
     """
     Finds a host in the configuration by its MAC address.
-
-    Args:
-        config: The loaded server_config.json dictionary.
-        mac_address: The MAC address to search for.
-
-    Returns:
-        A tuple containing the host dictionary (or None) and its index (or None).
     """
     mac_lower = mac_address.lower()
     known_hosts = config.get("known_hosts", [])
@@ -67,6 +60,16 @@ def get_host_by_mac(config: Dict, mac_address: str) -> Tuple[Optional[Dict], Opt
         if host.get("mac", "").lower() == mac_lower:
             return host, i
     return None, None
+
+
+def get_network_config_by_id_or_name(config: Dict, identifier: str) -> Optional[Dict]:
+    """
+    Finds a network configuration from server_config.json by its id or name.
+    """
+    for network in config.get("networks", []):
+        if network.get("id") == identifier or network.get("name") == identifier:
+            return network
+    return None
 
 
 def get_active_leases(leases_file_path_str: str) -> list:
@@ -103,17 +106,15 @@ def get_shorewall_dynamic_blocked() -> List[str]:
 
     blocked_ips = []
     lines = result["stdout"].splitlines()
-    # Find the line for the 'blocked' zone
     try:
         start_index = lines.index("Shorewall dynamic blacklists for zone blocked:") + 1
         for line in lines[start_index:]:
             if line.strip() == "":
-                break # End of this section
+                break
             parts = line.split()
             if len(parts) > 0:
                 blocked_ips.append(parts[0])
     except ValueError:
-        # Section not found, which is fine if no IPs are dynamically blocked
         pass
 
     return blocked_ips
