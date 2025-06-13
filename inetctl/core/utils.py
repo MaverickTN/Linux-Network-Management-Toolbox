@@ -39,7 +39,6 @@ def run_command(command: list, check: bool = False) -> dict:
             "returncode": 124,
         }
 
-
 def check_root_privileges(action: str = "perform this action"):
     """Exits with an error if the script is not run as root."""
     if os.geteuid() != 0:
@@ -48,7 +47,6 @@ def check_root_privileges(action: str = "perform this action"):
             err=True,
         )
         raise typer.Exit(code=1)
-
 
 def get_host_by_mac(config: Dict, mac_address: str) -> Tuple[Optional[Dict], Optional[int]]:
     """
@@ -61,7 +59,6 @@ def get_host_by_mac(config: Dict, mac_address: str) -> Tuple[Optional[Dict], Opt
             return host, i
     return None, None
 
-
 def get_network_config_by_id_or_name(config: Dict, identifier: str) -> Optional[Dict]:
     """
     Finds a network configuration from server_config.json by its id or name.
@@ -71,13 +68,11 @@ def get_network_config_by_id_or_name(config: Dict, identifier: str) -> Optional[
             return network
     return None
 
-
 def get_active_leases(leases_file_path_str: str) -> list:
     """Parses the dnsmasq.leases file and returns a simple list of active leases."""
     leases_file_path = Path(leases_file_path_str)
     if not leases_file_path.exists():
         return []
-
     leases = []
     try:
         with open(leases_file_path, 'r') as f:
@@ -91,9 +86,7 @@ def get_active_leases(leases_file_path_str: str) -> list:
                     })
     except IOError as e:
         typer.echo(f"Warning: Could not read leases file at {leases_file_path_str}: {e}", err=True)
-
     return leases
-
 
 def get_shorewall_dynamic_blocked() -> List[str]:
     """
@@ -116,5 +109,24 @@ def get_shorewall_dynamic_blocked() -> List[str]:
                 blocked_ips.append(parts[0])
     except ValueError:
         pass
-
     return blocked_ips
+
+def print_item_details(item: Dict, title: str):
+    """Prints a formatted key-value summary of a dictionary."""
+    typer.echo(typer.style(f"\n--- {title} ---", fg=typer.colors.CYAN, bold=True))
+    if not item:
+        typer.echo("Not found or no details available.")
+        return
+
+    for key, value in item.items():
+        key_styled = typer.style(f"{key.replace('_', ' ').capitalize():<25}", fg=typer.colors.WHITE)
+        if isinstance(value, bool):
+            value_styled = typer.style(str(value), fg=typer.colors.GREEN if value else typer.colors.RED)
+        elif isinstance(value, dict) or isinstance(value, list):
+            value_styled = json.dumps(value)
+        elif value is None:
+            value_styled = typer.style("Not set", fg=typer.colors.YELLOW)
+        else:
+            value_styled = str(value)
+        typer.echo(f"{key_styled}: {value_styled}")
+    typer.echo("-" * (len(title) + 8))
