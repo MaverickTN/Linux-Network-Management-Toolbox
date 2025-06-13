@@ -9,7 +9,7 @@ from typing import Optional, List, Dict, Any, Tuple
 from concurrent.futures import ThreadPoolExecutor
 
 def run_command(command: List[str], dry_run: bool, suppress_output: bool = False, check: bool = True, return_output: bool = False) -> Any:
-    """Helper to run a system command. Can now optionally return output."""
+    """Helper to run a system command."""
     if dry_run:
         typer.echo(typer.style(f"DRY RUN: Would execute: sudo {' '.join(command)}", fg=typer.colors.CYAN))
         return True if not return_output else ""
@@ -23,11 +23,10 @@ def run_command(command: List[str], dry_run: bool, suppress_output: bool = False
                 typer.echo(result.stdout)
             return True
         else:
-            if check:
-                if not suppress_output:
-                    typer.echo(typer.style(f"Error executing: {' '.join(command)}", fg=typer.colors.RED))
-                    if result.stderr:
-                        typer.echo(typer.style(result.stderr, fg=typer.colors.RED))
+            if check and not suppress_output:
+                typer.echo(typer.style(f"Error executing: {' '.join(command)}", fg=typer.colors.RED))
+                if result.stderr:
+                    typer.echo(typer.style(result.stderr, fg=typer.colors.RED))
             return False if not return_output else result.stderr
     except Exception as e:
         if not suppress_output:
@@ -35,12 +34,8 @@ def run_command(command: List[str], dry_run: bool, suppress_output: bool = False
         return False if not return_output else str(e)
 
 def is_host_online(ip: str) -> bool:
-    """
-    Performs a quick ping to check if a host is online.
-    Returns True if online, False otherwise.
-    """
-    if not ip or ip == 'N/A':
-        return False
+    """Performs a quick ping to check if a host is online."""
+    if not ip or ip == 'N/A': return False
     try:
         param_count = "-n" if platform.system() == "Windows" else "-c"
         param_timeout = "-w" if platform.system() == "Windows" else "-W"
@@ -51,9 +46,7 @@ def is_host_online(ip: str) -> bool:
         return False
 
 def check_multiple_hosts_online(ip_list: List[str]) -> Dict[str, bool]:
-    """
-    Pings a list of IP addresses concurrently and returns their online status.
-    """
+    """Pings a list of IP addresses concurrently and returns their online status."""
     online_statuses = {}
     with ThreadPoolExecutor(max_workers=20) as executor:
         future_to_ip = {executor.submit(is_host_online, ip): ip for ip in ip_list}
@@ -66,10 +59,8 @@ def check_multiple_hosts_online(ip_list: List[str]) -> Dict[str, bool]:
     return online_statuses
 
 def check_root_privileges(action_description: str):
-    """Checks for root privileges and exits if not available."""
     if os.geteuid() != 0:
         typer.echo(typer.style(f"Error: Root privileges are required to {action_description}.", fg=typer.colors.RED, bold=True))
-        typer.echo("Please try running this command using 'sudo'.")
         raise typer.Exit(code=1)
 
 def get_network_config_by_id_or_name(config: Dict[str, Any], id_or_name: str) -> Optional[Dict[str, Any]]:
@@ -123,9 +114,8 @@ def print_item_details(item: Dict[str, Any], title_prefix: str = ""):
              continue
         typer.echo(f"  {key.replace('_', ' ').title()}: {value}")
 
-def get_active_leases(leases_file_path_str: str, static_reservations: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """Parses the dnsmasq.leases file and returns a list of active leases."""
-    leases_file_path = Path(leases_file_path_str)
+def get_active_leases(leases_file_path_str: str) -> List[Dict[str, str]]:
+    """Parses the dnsmasq.leases file and returns a simple list of active leases."""    leases_file_path = Path(leases_file_path_str)
     leases = []
     if not leases_file_path.exists():
         return leases
@@ -135,8 +125,7 @@ def get_active_leases(leases_file_path_str: str, static_reservations: List[Dict[
             for line in f:
                 parts = line.strip().split()
                 if len(parts) >= 4:
-                    lease = {'mac': parts[1].lower(), 'ip': parts[2], 'hostname': parts[3] if parts[3] != '*' else '(unknown)'}
-                    leases.append(lease)
+					leases.append({'mac': parts[1].lower(), 'ip': parts[2], 'hostname': parts[3] if parts[3] != '*' else '(unknown)'})                    lease = {'mac': parts[1].lower(), 'ip': parts[2], 'hostname': parts[3] if parts[3] != '*' else '(unknown)'}
     except Exception as e:
         typer.echo(typer.style(f"Warning: Could not read or parse leases file '{leases_file_path}': {e}", fg=typer.colors.YELLOW, bold=True))
     
