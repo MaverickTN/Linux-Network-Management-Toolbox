@@ -1,81 +1,110 @@
 import typer
-from typing import List, Dict, Any
+import time
 
 from inetctl.core.config_loader import load_config
-from inetctl.core.shorewall import (ACCOUNTING_MANAGED_BLOCK_END,
-                                    ACCOUNTING_MANAGED_BLOCK_START,
-                                    generate_accounting_config,
-                                    write_shorewall_file,
-                                    get_currently_blocked_ips)
-from inetctl.core.utils import (check_root_privileges, get_active_leases,
-                                run_command)
+from inetctl.core.utils import (
+    run_command,
+    get_shorewall_dynamic_blocked,
+    get_active_leases,
+    check_root_privileges,
+)
+from inetctl.core.shorewall import (
+    generate_accounting_rules,
+    generate_policy_rules,
+    generate_mangle_rules,
+    apply_shorewall_config,
+)
 
-app = typer.Typer(name="shorewall", help="Synchronize and manage Shorewall state.", no_args_is_help=True)
+app = typer.Typer(
+    name="shorewall", help="Manage Shorewall firewall rules.", no_args_is_help=True
+)
 
-@app.command("sync")
-def sync_shorewall(
-    dry_run: bool = typer.Option(False, "--dry-run", help="Show changes without applying them.")
-):
+
+@app.command(name="sync")
+def sync_shorewall():
     """
-    Synchronizes Shorewall accounting and dynamic blacklist with the live network state.
+    Synchronizes the firewall state with the server_config.json.
+    This is the master command to reconcile device access (block/allow).
     """
-    if not dry_run:
-        check_root_privileges("apply changes to Shorewall")
-
+    check_root_privileges("synchronize the firewall")
     config = load_config()
     gs = config.get("global_settings", {})
-    hosts_config = config.get("hosts_dhcp_reservations", [])
-    leases = get_active_leases(gs.get("dnsmasq_leases_file", ""), hosts_config)
-    
-    # --- Part 1: Sync Access Control via Dynamic Zone ---
-    typer.echo(typer.style("Syncing Shorewall Dynamic 'blocked' Zone...", bold=True))
-    currently_blocked = get_currently_blocked_ips("blocked")
-    
-    active_ips = {lease.get("ip") for lease in leases}
-    ips_that_should_be_blocked = {host.get("ip_address") for host in hosts_config if host.get("network_access_blocked")}
-    
-    desired_blocked_set = ips_that_should_be_blocked.intersection(active_ips)
+    known_hosts = config.get("known_hosts", [])
+    leases_file = gs.get("dnsmasq_leases_file", "")
 
-    ips_to_add = desired_blocked_set - currently_blocked
-    ips_to_remove = currently_blocked - desired_blocked_set
+    # --- THIS IS THE NEW, SMARTER LOGIC ---
+    # 1. Get the current IP for all active devices for lookups
+    active_leases = get_active_leases(leases_file)
+    mac_to_ip_map = {lease["mac"]: lease["ip"] for lease in active_leases}
+
+    # 2. Build the set of IPs that SHOULD be blocked based on config
+    desired_blocked_ips = set()
+    for host in known_hosts:
+        if host.get("network_access_blocked"):
+            ip_to_block = None
+            assignment = host.get("ip_assignment", {})
+            # If it's a static IP, use the one from the config
+            if assignment.get("type") == "static":
+                ip_to_block = assignment.get("ip")
+            # If it's DHCP, find its current IP from the active leases
+            elif assignment.get("type") == "dhcp":
+                ip_to_block = mac_to_ip_map.get(host.get("mac"))
+            
+            if ip_to_block:
+                desired_blocked_ips.add(ip_to_block)
+
+    # 3. Get the IPs that are ACTUALLY blocked right now
+    live_blocked_ips = set(get_shorewall_dynamic_blocked())
+    
+    # --- The rest of the logic remains the same ---
+    ips_to_add = desired_blocked_ips - live_blocked_ips
+    ips_to_remove = live_blocked_ips - desired_blocked_ips
 
     if not ips_to_add and not ips_to_remove:
-        typer.echo("Access control rules are already in sync.")
-    else:
-        for ip in ips_to_remove:
-            typer.echo(f"Removing stale or allowed IP from zone 'blocked': {ip}")
-            run_command(["shorewall", "delete", "blocked", ip], dry_run=dry_run, suppress_output=True)
-        for ip in ips_to_add:
-            typer.echo(f"Adding newly blocked IP to zone 'blocked': {ip}")
-            run_command(["shorewall", "add", "blocked", ip], dry_run=dry_run, suppress_output=True)
-        
-        if not dry_run:
-            typer.echo("Refreshing Shorewall to apply dynamic zone changes...")
-            run_command(["shorewall", "refresh"], dry_run=False)
+        typer.echo("Shorewall dynamic block list is already in sync.")
+        return
 
-    # --- Part 2: Sync Accounting File ---
-    typer.echo(typer.style("\nSyncing Shorewall Accounting File...", bold=True))
+    typer.echo("Synchronizing Shorewall dynamic block list...")
+    for ip in ips_to_add:
+        typer.echo(f"  - Adding {ip} to 'blocked' zone.")
+        run_command(["sudo", "shorewall", "add", "blocked", ip])
+
+    for ip in ips_to_remove:
+        typer.echo(f"  - Removing {ip} from 'blocked' zone.")
+        run_command(["sudo", "shorewall", "delete", "blocked", ip])
     
-    if not leases:
-        typer.echo(typer.style("No active leases found to monitor.", fg=typer.colors.YELLOW))
-        accounting_content = ""
-    else:
-        typer.echo(f"Found {len(leases)} active leases to generate accounting rules for.")
-        accounting_content = generate_accounting_config(leases)
-    
-    # This writes the file, but a 'reload' is needed to apply it.
-    write_shorewall_file(accounting_content, "/etc/shorewall/accounting", ACCOUNTING_MANAGED_BLOCK_START, ACCOUNTING_MANAGED_BLOCK_END, dry_run)
-
-    typer.echo(typer.style("\nSynchronization check complete.", fg=typer.colors.GREEN, bold=True))
-    typer.echo("Run 'inetctl shorewall reload' to apply any changes to the accounting file.")
+    typer.echo(typer.style("Sync complete.", fg=typer.colors.GREEN))
 
 
-@app.command("reload")
-def reload_shorewall_cmd(
-    dry_run: bool = typer.Option(False, "--dry-run", help="Show what would be done.")
+@app.command(name="apply-config")
+def apply_shorewall_full_config(
+    force_reload: bool = typer.Option(
+        False, "--force", "-f", help="Force a 'shorewall reload' even if files are unchanged."
+    )
 ):
-    """Performs a full 'shorewall reload' to apply config file changes."""
-    typer.echo("Performing a full Shorewall reload...")
-    run_command(["shorewall", "reload"], dry_run=dry_run)
-    if not dry_run:
-        typer.echo(typer.style("Shorewall reloaded successfully.", fg=typer.colors.GREEN))
+    """Generates all Shorewall config files and reloads if needed."""
+    check_root_privileges("apply full Shorewall configuration")
+    config = load_config()
+
+    typer.echo("Generating Shorewall configuration files...")
+    
+    # Generate the content for each file
+    policy_content = generate_policy_rules(config)
+    accounting_content = generate_accounting_rules(config)
+    mangle_content = generate_mangle_rules(config)
+
+    # Apply the content to the files
+    policy_changed = apply_shorewall_config("/etc/shorewall/policy", policy_content)
+    accounting_changed = apply_shorewall_config("/etc/shorewall/accounting", accounting_content)
+    mangle_changed = apply_shorewall_config("/etc/shorewall/mangle", mangle_content)
+
+    if policy_changed or accounting_changed or mangle_changed or force_reload:
+        typer.echo("Configuration changed. Reloading Shorewall...")
+        result = run_command(["sudo", "shorewall", "reload"])
+        if result["returncode"] == 0:
+            typer.echo(typer.style("Shorewall reloaded successfully.", fg=typer.colors.GREEN))
+        else:
+            typer.echo(typer.style(f"Error reloading Shorewall:\n{result['stderr']}", fg=typer.colors.RED), err=True)
+            raise typer.Exit(code=1)
+    else:
+        typer.echo("No changes detected in Shorewall configuration files. Nothing to do.")
