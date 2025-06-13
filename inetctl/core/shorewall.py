@@ -4,25 +4,20 @@ import subprocess
 from pathlib import Path
 from typing import List, Dict, Any, Set
 
-# --- Constants for Managed Blocks ---
 ACCOUNTING_MANAGED_BLOCK_START = "# BEGIN INETCTL MANAGED ACCOUNTING"
 ACCOUNTING_MANAGED_BLOCK_END = "# END INETCTL MANAGED ACCOUNTING"
 
-
 def generate_accounting_config(active_hosts: List[Dict[str, Any]]) -> str:
     """
-    Generates the content for the Shorewall accounting file based on a list of
-    currently active devices. This version uses the correct, compliant format.
+    Generates the content for the Shorewall accounting file using the correct,
+    modern, section-based format.
     """
     if not active_hosts:
-        return ""
+        return "?SECTION FORWARD\n"
 
-    all_lines = []
-    processed_macs = set() # Keep track of MACs we've already defined chains for
+    all_lines = ["?SECTION FORWARD"]
+    processed_macs = set()
 
-    # All rules are added under a single, valid section.
-    all_lines.append("?SECTION FORWARD")
-    
     for host in active_hosts:
         mac_sanitized = host.get("mac", "").replace(":", "")
         ip_addr = host.get("ip")
@@ -32,26 +27,20 @@ def generate_accounting_config(active_hosts: List[Dict[str, Any]]) -> str:
         
         chain_name = f"acct_{mac_sanitized}"
         
-        # Only create the chain ONCE per unique MAC address.
+        # Only create the chain definition ONCE per unique MAC address.
         if mac_sanitized not in processed_macs:
-            all_lines.append(f"# Rules for device {host.get('id', mac_sanitized)}")
-            
-            # PART 1: Define the chain and its COUNT rule first.
-            # This creates the chain 'acct_...' and puts one rule inside it that counts every packet.
+            all_lines.append(f"# Rules for device {host.get('hostname', mac_sanitized)}")
+            # ACTION is COUNT, CHAIN is our custom chain. This defines the chain and a simple counting rule.
             all_lines.append(f"COUNT\t{chain_name}")
-            
-            # PART 2: Define the JUMP rules from the main FORWARD chain to our new chain.
-            # ACTION is the chain name, which creates a JUMP.
-            # This must come *after* the chain has been defined by the COUNT rule above.
-            
-            # Download Traffic to Host
-            all_lines.append(f"{chain_name}\t-\t{ip_addr}")
-            # Upload Traffic from Host
-            all_lines.append(f"{chain_name}\t{ip_addr}\t-")
-            
-            all_lines.append("#") # Add a separator for readability
             processed_macs.add(mac_sanitized)
-        
+
+        # The ACTION is the chain name, which creates a JUMP from the FORWARD chain to our custom chain.
+        # Download Traffic to Host
+        all_lines.append(f"{chain_name}\t-\t{ip_addr}")
+        # Upload Traffic from Host
+        all_lines.append(f"{chain_name}\t{ip_addr}\t-")
+        all_lines.append("#") # Separator for readability
+
     return "\n".join(all_lines)
 
 
@@ -141,20 +130,3 @@ def get_currently_blocked_ips(zone: str) -> Set[str]:
     except FileNotFoundError:
         return set()
     return blocked_ips
-
-
-def write_dynamic_zone_file(ips: List[str], zone_file_path_str: str, dry_run: bool) -> bool:
-    """Writes a list of IP addresses to a Shorewall dynamic zone file."""
-    file_path = Path(zone_file_path_str)
-    content = "\n".join(ips) + "\n"
-    if dry_run:
-        print(f"\n--- DRY RUN: Proposed content for {zone_file_path_str} ---\n{content.strip()}\n--- END DRY RUN ---")
-        return True
-    try:
-        file_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(file_path, "w") as f:
-            f.write(content)
-        return True
-    except Exception as e:
-        print(f"Error writing to Shorewall dynamic zone file {file_path}: {e}")
-        return False
