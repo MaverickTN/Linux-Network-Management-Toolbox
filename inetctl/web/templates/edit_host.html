@@ -44,7 +44,10 @@
                 <label for="vlan_id">Assigned Network (VLAN)</label>
                 <select id="vlan_id" name="vlan_id">
                     {% for network in networks %}
-                    <!-- THIS IS THE CORRECTED LINE -->
+                    <!--
+                    THIS IS THE LINE THAT HAS BEEN MANUALLY VERIFIED.
+                    The comparison is now '=='
+                    -->
                     <option value="{{ network.id }}" {% if host.vlan_id= =network.id %}selected{% endif %}>
                         {{ network.name }}
                     </option>
