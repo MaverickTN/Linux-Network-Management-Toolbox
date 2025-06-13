@@ -1,15 +1,14 @@
 import typer
 from typing import List
-
 from inetctl.core.utils import (
     check_root_privileges,
     run_command,
-    get_shorewall_dynamic_blocked, # CORRECTED import location and name
+    get_shorewall_blacklisted_ips,
 )
 
 app = typer.Typer(
     name="access",
-    help="Manually manage device access via the dynamic block list.",
+    help="Manually manage device access via the Shorewall blacklist.",
     no_args_is_help=True
 )
 
@@ -17,35 +16,34 @@ app = typer.Typer(
 def block_ip(
     ips: List[str] = typer.Argument(..., help="One or more IP addresses to block."),
 ):
-    """Adds an IP address to the dynamic 'blocked' zone in Shorewall."""
+    """Adds an IP address to the blacklist using 'shorewall reject'."""
     check_root_privileges("block IPs")
     for ip in ips:
-        typer.echo(f"Blocking {ip}...")
-        run_command(["sudo", "shorewall", "add", "blocked", ip])
+        typer.echo(f"Blacklisting (rejecting) {ip}...")
+        run_command(["sudo", "shorewall", "reject", ip])
     typer.echo(typer.style("Done.", fg=typer.colors.GREEN))
 
 @app.command(name="unblock")
 def unblock_ip(
     ips: List[str] = typer.Argument(..., help="One or more IP addresses to unblock."),
 ):
-    """Removes an IP address from the dynamic 'blocked' zone in Shorewall."""
+    """Removes an IP address from the blacklist using 'shorewall allow'."""
     check_root_privileges("unblock IPs")
     for ip in ips:
-        typer.echo(f"Unblocking {ip}...")
-        run_command(["sudo", "shorewall", "delete", "blocked", ip])
+        typer.echo(f"Un-blacklisting (allowing) {ip}...")
+        run_command(["sudo", "shorewall", "allow", ip])
     typer.echo(typer.style("Done.", fg=typer.colors.GREEN))
 
 @app.command(name="list")
 def list_blocked():
-    """Lists dynamically blocked IPs in Shorewall."""
-    check_root_privileges("list blocked IPs")
-    typer.echo("Currently blocked dynamic IPs in Shorewall:")
+    """Lists blacklisted IPs in Shorewall."""
+    check_root_privileges("list blacklisted IPs")
+    typer.echo("Currently blacklisted IPs in Shorewall:")
     
-    # CORRECTED function call
-    currently_blocked = get_shorewall_dynamic_blocked() 
+    currently_blocked = get_shorewall_blacklisted_ips() 
     
     if currently_blocked:
         for ip in currently_blocked:
             typer.echo(f" - {ip}")
     else:
-        typer.echo("No hosts are dynamically blocked.")
+        typer.echo("The blacklist is empty.")

@@ -11,14 +11,25 @@ from typing import List, Dict, Any, Tuple, Optional
 def run_command(command: list, check: bool = False) -> dict:
     """Runs a shell command and returns its output, stderr, and return code."""
     try:
-        result = subprocess.run(command, capture_output=True, text=True, check=check, timeout=10)
-        return {"stdout": result.stdout.strip(), "stderr": result.stderr.strip(), "returncode": result.returncode}
+        result = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            check=check,
+            timeout=10
+        )
+        return {
+            "stdout": result.stdout.strip(),
+            "stderr": result.stderr.strip(),
+            "returncode": result.returncode,
+        }
     except FileNotFoundError:
         return {"stdout": "", "stderr": f"Command not found: {command[0]}", "returncode": 127}
     except subprocess.CalledProcessError as e:
         return {"stdout": e.stdout.strip(), "stderr": e.stderr.strip(), "returncode": e.returncode}
     except subprocess.TimeoutExpired:
         return {"stdout": "", "stderr": f"Command timed out: {' '.join(command)}", "returncode": 124}
+
 
 def check_root_privileges(action: str = "perform this action"):
     """Exits with an error if the script is not run as root."""
@@ -36,6 +47,7 @@ def get_host_by_mac(config: Dict, mac_address: str) -> Tuple[Optional[Dict], Opt
         if host.get("mac", "").lower() == mac_lower:
             return host, i
     return None, None
+
 
 def get_network_config_by_id_or_name(config: Dict, identifier: str) -> Optional[Dict]:
     """Finds a network configuration from server_config.json by its id or name."""
@@ -62,23 +74,30 @@ def get_active_leases(leases_file_path_str: str) -> list:
         typer.echo(f"Warning: Could not read leases file at {leases_file_path_str}: {e}", err=True)
     return leases
 
-def get_shorewall_dynamic_blocked() -> List[str]:
-    """Parses `shorewall show dynamic` to get a list of currently blocked IPs."""
-    result = run_command(["sudo", "shorewall", "show", "dynamic"])
+
+def get_shorewall_blacklisted_ips() -> List[str]:
+    """
+    Parses `shorewall show blacklists` to get a list of currently blocked IPs.
+    """
+    result = run_command(["sudo", "shorewall", "show", "blacklists"])
     if result["returncode"] != 0:
+        typer.echo("Warning: Could not get blacklist from Shorewall.", err=True)
         return []
-    blocked_ips = []
+
+    blacklisted_ips = []
     lines = result["stdout"].splitlines()
     try:
-        start_index = lines.index("Shorewall dynamic blacklists for zone blocked:") + 1
+        start_index = lines.index("Shorewall Blacklisted IPs:") + 1
         for line in lines[start_index:]:
-            if line.strip() == "": break
+            if line.strip() == "":
+                break 
             parts = line.split()
             if len(parts) > 0:
-                blocked_ips.append(parts[0])
+                blacklisted_ips.append(parts[0])
     except ValueError:
         pass
-    return blocked_ips
+    return blacklisted_ips
+
 
 # --- Formatting and Display ---
 
@@ -127,7 +146,6 @@ def generate_tc_commands(config: Dict, interface: str, parent_qdisc_id: str = "1
 
 def is_host_online(ip: str) -> bool:
     """Pings a host once to check for liveness. Returns True if online, False otherwise."""
-    # -c 1: one packet, -W 1: 1-second timeout
     result = subprocess.run(["ping", "-c", "1", "-W", "1", ip], capture_output=True)
     return result.returncode == 0
 
