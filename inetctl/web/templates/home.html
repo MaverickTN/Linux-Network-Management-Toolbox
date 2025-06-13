@@ -5,38 +5,53 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>inetctl Dashboard</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css" />
-    <!-- RESTORED: Chart.js library needed for bandwidth graphs -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
     <style>
-        /* Base styles from before */
+        :root {
+            --pico-font-size: 14px;
+            --pico-grid-spacing-horizontal: 1.5rem;
+        }
+
         body {
             padding-bottom: 5em;
         }
 
-        .tab-content {
-            padding: 1em;
-            border: 1px solid var(--pico-muted-border-color);
-            border-top: none;
-        }
-
         .status-dot {
-            height: 12px;
-            width: 12px;
+            height: 10px;
+            width: 10px;
             border-radius: 50%;
             display: inline-block;
-            margin-right: 8px;
+            vertical-align: middle;
         }
 
         .online {
-            background-color: var(--pico-color-green-400);
+            background-color: #43a047;
         }
 
         .offline {
-            background-color: var(--pico-color-red-400);
+            background-color: #757575;
         }
 
         .blocked {
-            background-color: var(--pico-color-amber-400);
+            background-color: #fb8c00;
+        }
+
+        .assignment-badge {
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 0.8em;
+            font-weight: bold;
+            color: #fff;
+        }
+
+        .reserved {
+            background-color: var(--pico-color-azure-500);
+        }
+
+        .dynamic {
+            background-color: var(--pico-color-orange-500);
         }
 
         .host-actions {
@@ -46,42 +61,15 @@
             align-items: center;
         }
 
-            .host-actions form, .host-actions a {
-                margin-bottom: 0;
-            }
-
-        .schedule-icon {
+        .schedule-icon, .no-reservation-icon {
             font-size: 0.9em;
             cursor: help;
         }
 
-        [data-tooltip] {
-            position: relative;
-            cursor: pointer;
+        [data-tooltip]::after {
+            z-index: 1000;
+            white-space: pre;
         }
-
-            [data-tooltip]::after {
-                content: attr(data-tooltip);
-                position: absolute;
-                left: 50%;
-                transform: translateX(-50%);
-                bottom: 100%;
-                margin-bottom: 5px;
-                background-color: var(--pico-tooltip-background-color);
-                color: var(--pico-tooltip-color);
-                padding: 5px 10px;
-                border-radius: var(--pico-border-radius);
-                font-size: 0.8em;
-                white-space: pre;
-                opacity: 0;
-                visibility: hidden;
-                transition: opacity 0.2s, visibility 0.2s;
-            }
-
-            [data-tooltip]:hover::after {
-                opacity: 1;
-                visibility: visible;
-            }
 
         nav {
             display: flex;
@@ -89,154 +77,340 @@
             align-items: center;
         }
 
-        /* RESTORED: Styling for rounded, colored buttons */
-        .btn {
-            padding: 0.5rem 1rem;
-            border-radius: 12px;
-            text-decoration: none;
-            color: #fff;
-            border: none;
-            cursor: pointer;
+        dialog article {
+            width: 70vw;
+            max-width: 900px;
         }
 
-            .btn.edit {
-                background-color: #fca11a;
-            }
-            /* Orange */
-            .btn.stats {
-                background-color: #2b82cf;
-            }
-        /* Blue */
-
-        /* RESTORED: Style for the hidden chart row */
-        .chart-row {
-            display: none;
+        .form-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: var(--pico-grid-spacing-horizontal);
         }
 
-        .chart-cell {
-            padding: 1rem !important;
-            background-color: var(--pico-card-background-color);
+        .ip-input-group {
+            display: flex;
+            align-items: center;
+            gap: 0.2rem;
+        }
+
+            .ip-input-group input {
+                text-align: center;
+            }
+
+            .ip-input-group span {
+                font-weight: bold;
+            }
+
+        .table-container {
+            overflow-x: auto;
         }
     </style>
 </head>
 <body>
     <main class="container">
+        <!-- Navigation Bar -->
         <nav>
             <ul><li><a href="{{ url_for('home') }}"><h1>inetctl</h1></a></li></ul>
-            <ul><li><a href="{{ url_for('logs') }}" role="button" class="secondary outline">Event Logs</a></li></ul>
+            <ul>
+                {% if current_user.role == 'admin' %}
+                <li><a href="{{ url_for('logs') }}" role="button" class="secondary outline">Audit Logs</a></li>{% endif %}
+                <li><a href="{{ url_for('logout') }}" role="button" class="contrast">Logout ({{ current_user.username }})</a></li>
+            </ul>
         </nav>
 
-        {% with messages = get_flashed_messages(with_categories=true) %}
-        {% for category, message in messages %}<div class="notice {% if category == 'error' %}warning{% endif %}"><p>{{ message }}</p></div>{% endfor %}
-        {% endwith %}
-
+        <!-- Action Buttons -->
+        {% if current_user.role in ['admin', 'operator'] %}
         <details>
             <summary role="button" class="secondary">System Actions</summary>
-            <div class="grid">
-                <div><button data-target="add-host-modal" onClick="toggleModal(event)">Add New Host</button></div>
-                <div><form action="{{ url_for('sync_firewall') }}" method="post" onsubmit="return confirm('Reconcile block/allow rules?');"><button type="submit">Sync Firewall</button></form></div>
-            </div>
+            <div class="grid"><button onclick="queueJob('shorewall:sync')">Sync Firewall State</button></div>
         </details>
+        {% endif %}
 
-        <tabs>{% for vlan_id, _ in hosts_by_vlan.items() %}<tab {% if loop.first %}active{% endif %}>{{ network_map[vlan_id] }}</tab>{% endfor %}</tabs>
+        <!-- VLAN Tabs -->
+        <tabs>{% for vlan_id in all_vlan_keys %}<tab {% if loop.first %}active{% endif %}>{{ network_map.get(vlan_id, vlan_id) }}</tab>{% endfor %}</tabs>
+
         <div class="tab-contents">
-            {% for vlan_id, hosts in hosts_by_vlan.items() %}
+            {% for vlan_id in all_vlan_keys %}
             <div class="tab-content" {% if loop.first %}style="display: block;" {% endif %}>
-                <table>
-                    <thead><tr><th>Status</th><th>Description / Hostname</th><th>MAC / IP</th><th style="text-align: right;">Actions</th></tr></thead>
-                    <tbody>
-                        {% for host in hosts %}
-                        <!-- This is the main row for each host -->
-                        <tr>
-                            <td>
-                                {% if host.network_access_blocked %}<span class="status-dot blocked"></span>Blocked
-                                {% elif host.is_online %}<span class="status-dot online"></span>Online
-                                {% else %}<span class="status-dot offline"></span>Offline
-                                {% endif %}
-                            </td>
-                            <td>
-                                <strong>{{ host.description }}</strong>
-                                <small style="display: block; color: var(--pico-muted-color);">
-                                    {{ host.hostname }}
-                                    {% if host.get('schedule') and host.schedule.get('enabled') %}<span class="schedule-icon" data-tooltip="Schedule: {{ host.schedule.start_time }}-{{ host.schedule.end_time }} ({{ host.schedule.days|join(', ') }})">🕒</span>{% endif %}
-                                </small>
-                            </td>
-                            <td><small>{{ host.mac }}<br>{{ host.ip_assignment.ip if host.ip_assignment.ip else 'DHCP' }}</small></td>
-                            <td class="host-actions">
-                                <!-- RESTORED: Stats button -->
-                                {% if host.is_online %}<button class="btn stats" onclick="toggleChart('{{ host.mac.replace(':', '') }}')">Live Stats</button>{% endif %}
-                                <a href="{{ url_for('edit_host', host_mac=host.mac) }}" class="btn edit">Edit</a>
-                            </td>
-                        </tr>
-                        <!-- RESTORED: This is the hidden row for the chart -->
-                        <tr id="chart-row-{{ host.mac.replace(':', '') }}" class="chart-row">
-                            <td colspan="4" class="chart-cell">
-                                <canvas id="chart-{{ host.mac.replace(':', '') }}" height="100"></canvas>
-                            </td>
-                        </tr>
-                        {% else %}
-                        <tr><td colspan="4">No hosts configured in this network.</td></tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
+
+                <!-- Tab Header with VLAN-wide Actions -->
+                <div class="grid" style="align-items: center;">
+                    <h4>Active Devices</h4>
+                    {% if current_user.role == 'admin' %}
+                    <div style="text-align: right;">
+                        <button class="secondary outline" onclick="queueVlanToggle('{{vlan_id}}', true)">Block VLAN</button>
+                        <button class="secondary" onclick="queueVlanToggle('{{vlan_id}}', false)">Unblock VLAN</button>
+                    </div>
+                    {% endif %}
+                </div>
+
+                <!-- Active Devices Table -->
+                <div class="table-container">
+                    <table>
+                        <thead><tr><th>Status</th><th>Assignment</th><th>Description / Hostname</th><th>MAC / IP</th><th style="text-align: right;">Actions</th></tr></thead>
+                        <tbody>
+                            {% for device in active_by_vlan.get(vlan_id, []) %}
+                            <tr>
+                                <td><span class="status-dot {{ 'blocked' if device.network_access_blocked else 'online' }}"></span></td>
+                                <td><span class="assignment-badge {{ device.assignment_status|lower }}">{{ device.assignment_status }}</span></td>
+                                <td><strong>{{ device.description }}</strong><br><small>{{ device.hostname }}</small></td>
+                                <td><small>{{ device.mac }}<br>{{ device.ip }}</small></td>
+                                <td class="host-actions">
+                                    {% if current_user.role in ['admin', 'operator'] %}
+                                    <button class="outline" onclick="openEditModal('{{ device.mac }}')">Edit</button>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr><td colspan="5">No active devices detected in this network.</td></tr> {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Offline Reservations Table -->
+                {% if offline_by_vlan.get(vlan_id) %}
+                <h4>Offline Reservations</h4>
+                <div class="table-container">
+                    <table>
+                        <thead><tr><th>Status</th><th>Description / Hostname</th><th>MAC / Configured IP</th><th style="text-align: right;">Actions</th></tr></thead>
+                        <tbody>
+                            {% for device in offline_by_vlan.get(vlan_id) %}
+                            <tr>
+                                <td><span class="status-dot {{ 'blocked' if device.network_access_blocked else 'offline' }}"></span></td>
+                                <td><strong>{{ device.description }}</strong><br><small>{{ device.hostname }}</small></td>
+                                <td><small>{{ device.mac }}<br>{{ device.ip_assignment.ip if device.ip_assignment and device.ip_assignment.type == 'static' else 'DHCP' }}</small></td>
+                                <td class="host-actions">
+                                    {% if current_user.role in ['admin', 'operator'] %}
+                                    <button class="outline" onclick="openEditModal('{{ device.mac }}')">Edit</button>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% endif %}
             </div>
             {% endfor %}
         </div>
     </main>
 
-    <!-- Modal dialogs... -->
-    <dialog id="add-host-modal"><!-- ... Add Host form from before ... --></dialog>
+    <!-- The Super Edit Modal -->
+    <dialog id="edit-host-modal">
+        <article>
+            <header>
+                <a href="#close" aria-label="Close" class="close" onclick="document.getElementById('edit-host-modal').close()"></a>
+                <strong id="modal-title">Edit Host</strong>
+            </header>
+            <form id="edit-host-form" onsubmit="handleFormSubmit(event)">
+                <input type="hidden" id="edit-mac" name="mac">
+                <div class="form-grid">
+                    <label>Description <input type="text" id="edit-description" name="description" required></label>
+                    <label>Hostname <input type="text" id="edit-hostname" name="hostname" required></label>
+                </div>
+                <div class="form-grid">
+                    <label>VLAN <select id="edit-vlan" name="vlan_id"></select></label>
+                    <label>Static IP (Optional) <div id="ip-input" class="ip-input-group"></div></label>
+                </div>
+                <hr>
+                <h6>Access Control</h6>
+                <label><input type="checkbox" id="edit-blocked" name="network_access_blocked" role="switch"> Network Access Blocked</label>
+                <details>
+                    <summary>Access Schedule (Optional)</summary>
+                    <label><input type="checkbox" id="edit-schedule-enabled" name="schedule-enabled" role="switch"> Enable Scheduling for this host</label>
+                    <div class="form-grid">
+                        <label>
+                            Mode
+                            <select id="edit-schedule-mode" name="schedule-mode">
+                                <option value="block">Block during schedule</option>
+                                <option value="allow">Allow ONLY during schedule</option>
+                            </select>
+                        </label>
+                        <div></div>
+                        <label>Start Time (HH:MM) <input type="time" name="schedule-start_time" id="edit-schedule-start"></label>
+                        <label>End Time (HH:MM) <input type="time" name="schedule-end_time" id="edit-schedule-end"></label>
+                    </div>
+                    <fieldset>
+                        <legend>Days of Week</legend>
+                        <div class="grid" style="grid-template-columns: repeat(4, 1fr);">
+                            <label><input type="checkbox" name="schedule-days" value="mon"> Mon</label><label><input type="checkbox" name="schedule-days" value="tue"> Tue</label>
+                            <label><input type="checkbox" name="schedule-days" value="wed"> Wed</label><label><input type="checkbox" name="schedule-days" value="thu"> Thu</label>
+                            <label><input type="checkbox" name="schedule-days" value="fri"> Fri</label><label><input type="checkbox" name="schedule-days" value="sat"> Sat</label>
+                            <label><input type="checkbox" name="schedule-days" value="sun"> Sun</label>
+                        </div>
+                    </fieldset>
+                </details>
+                <hr>
+                <h6>Quality of Service (QoS)</h6>
+                <label>QoS Policy<select id="edit-qos" name="qos_policy"></select></label>
+                <footer>
+                    <button type="button" class="secondary" onclick="document.getElementById('edit-host-modal').close()">Cancel</button>
+                    <button type="submit">Save Changes</button>
+                </footer>
+            </form>
+        </article>
+    </dialog>
 
     <script>
-        // --- Tab and Modal JS from before (unchanged) ---
-        document.addEventListener('DOMContentLoaded', () => { /* ... */ });
-        const toggleModal = (event) => { /* ... */ };
+        let SYSTEM_CONFIG = {};
 
-        // --- RESTORED: JavaScript for fetching and rendering bandwidth charts ---
-        const activeCharts = {};
-
-        function updateChart(chartInstance) {
-            const hostId = chartInstance.canvas.id.replace('chart-', '');
-            fetch(`/data/bandwidth/${hostId}`)
-                .then(response => response.json())
-                .then(data => {
-                    chartInstance.data.labels = data.labels;
-                    chartInstance.data.datasets[0].data = data.datasets[0].data;
-                    chartInstance.data.datasets[1].data = data.datasets[1].data;
-                    chartInstance.update();
+        // ----- Core UI Logic -----
+        document.addEventListener('DOMContentLoaded', async () => {
+            const tabs = document.querySelectorAll('tabs tab');
+            const tabContents = document.querySelectorAll('.tab-content');
+            tabs.forEach((tab, index) => {
+                tab.addEventListener('click', () => {
+                    tabs.forEach(t => t.removeAttribute('active'));
+                    tab.setAttribute('active', '');
+                    tabContents.forEach(content => content.style.display = 'none');
+                    if (tabContents[index]) {
+                        tabContents[index].style.display = 'block';
+                    }
                 });
-        }
-
-        function createChart(hostId) {
-            const ctx = document.getElementById(`chart-${hostId}`).getContext('2d');
-            const newChart = new Chart(ctx, {
-                type: 'line',
-                data: { labels: [], datasets: [{ label: 'Download (Mbps)', data: [], borderColor: '#36a2eb', tension: 0.1 }, { label: 'Upload (Mbps)', data: [], borderColor: '#ff6384', tension: 0.1 }] },
-                options: { animation: { duration: 0 }, scales: { y: { beginAtZero: true, title: { display: true, text: 'Mbps' } } } }
             });
+            try {
+                const response = await fetch('/api/system_config');
+                SYSTEM_CONFIG = await response.json();
+            } catch (e) { console.error('Failed to load system config'); }
+        });
 
-            // Start the update loop
-            const intervalId = setInterval(() => updateChart(newChart), 5000);
-
-            activeCharts[hostId] = { chart: newChart, interval: intervalId };
-            updateChart(newChart); // Initial fetch
+        function showToast(message, type = 'info') {
+            const colors = { success: '#00b09b', error: '#ff5f6d', info: '#2b82cf' };
+            Toastify({ text: message, duration: 5000, gravity: "top", position: "right", stopOnFocus: true, style: { background: `linear-gradient(to right, ${colors[type] || colors['info']}, #61D5B4)` } }).showToast();
         }
 
-        function toggleChart(hostId) {
-            const chartRow = document.getElementById(`chart-row-${hostId}`);
-            if (chartRow.style.display === 'table-row') {
-                // Hide the chart and stop updates
-                chartRow.style.display = 'none';
-                clearInterval(activeCharts[hostId].interval);
-                activeCharts[hostId].chart.destroy();
-                delete activeCharts[hostId];
-            } else {
-                // Show the chart and start updates
-                chartRow.style.display = 'table-row';
-                if (!activeCharts[hostId]) {
-                    createChart(hostId);
-                }
+        // ----- Job Queueing Logic -----
+        async function queueJob(jobType, payload = {}) {
+            showToast(`Queueing job: ${jobType}...`, 'info');
+            try {
+                const response = await fetch('/api/submit_job', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ job_type: jobType, payload: payload }) });
+                const data = await response.json();
+                if (response.ok) {
+                    showToast(`Job #${data.job_id} queued successfully!`, 'success');
+                    pollJobStatus(data.job_id);
+                } else { showToast(`Error: ${data.message || 'Unknown error'}`, 'error'); }
+            } catch (error) { showToast(`Network Error: ${error}`, 'error'); }
+        }
+
+        function pollJobStatus(jobId) {
+            const pollInterval = setInterval(async () => {
+                try {
+                    const response = await fetch(`/api/job_status/${jobId}`);
+                    const data = await response.json();
+                    if (data.status === 'completed' || data.status === 'failed') {
+                        clearInterval(pollInterval);
+                        const message = `Job #${jobId} (${data.job_type}) finished: ${data.status.toUpperCase()}`;
+                        showToast(message, data.status === 'completed' ? 'success' : 'error');
+                        setTimeout(() => window.location.reload(), 2000);
+                    }
+                } catch (error) { clearInterval(pollInterval); showToast(`Error checking job status: ${error}`, 'error'); }
+            }, 3000);
+        }
+
+        function queueVlanToggle(vlanId, shouldBlock) {
+            const action = shouldBlock ? 'block' : 'unblock';
+            if (confirm(`This will queue a job to ${action} ALL hosts with reservations in this VLAN. This is a global change. Are you sure?`)) {
+                queueJob('api:vlan_toggle_access', { vlan_id: vlanId, block: shouldBlock });
             }
+        }
+
+        // ----- Smart IP Input Field Logic -----
+        const ipContainer = document.getElementById('ip-input');
+        function buildIpInput(cidr = "") {
+            ipContainer.innerHTML = '';
+            if (!cidr || !cidr.includes('/')) {
+                const input = document.createElement('input'); input.type = 'text'; input.name = 'ip-full'; input.placeholder = 'e.g., 192.168.1.100';
+                ipContainer.appendChild(input); return;
+            }
+            const [baseIp, _] = cidr.split('/');
+            const octets = baseIp.split('.');
+            octets.forEach((octet, i) => {
+                const input = document.createElement('input'); input.type = 'text'; input.name = `ip-octet-${i}`; input.maxLength = 3; input.pattern = '\\d*';
+                if (i < 3) { input.value = octet; input.readOnly = true; input.style.backgroundColor = 'var(--pico-muted-background-color)'; }
+                ipContainer.appendChild(input);
+                if (i < 3) ipContainer.appendChild(document.createTextNode('.'));
+            });
+        }
+        function getIpFromInput() {
+            if (ipContainer.querySelector('[name=ip-full]')) return ipContainer.querySelector('[name=ip-full]').value;
+            let ip = ''; let hasValue = false;
+            for (let i = 0; i < 4; i++) {
+                const octetVal = ipContainer.querySelector(`[name=ip-octet-${i}]`).value;
+                if (octetVal) hasValue = true;
+                ip += octetVal + (i < 3 ? '.' : '');
+            }
+            return hasValue ? (ip.endsWith('.') ? null : ip) : null;
+        }
+
+        // ----- Edit Modal Logic -----
+        async function openEditModal(mac) {
+            const modal = document.getElementById('edit-host-modal');
+            const form = document.getElementById('edit-host-form');
+            form.reset();
+            const response = await fetch(`/api/host_details/${mac}`);
+            if (!response.ok) { showToast('Error fetching host details.', 'error'); return; }
+            const data = await response.json();
+
+            document.getElementById('modal-title').textContent = `Edit: ${data.description || data.hostname || mac}`;
+            form.querySelector('#edit-mac').value = mac;
+            form.querySelector('#edit-description').value = data.description || '';
+            form.querySelector('#edit-hostname').value = data.hostname || '';
+            form.querySelector('#edit-blocked').checked = data.network_access_blocked || false;
+
+            const vlanSelect = form.querySelector('#edit-vlan'); vlanSelect.innerHTML = '';
+            (SYSTEM_CONFIG.networks || []).forEach(net => vlanSelect.add(new Option(net.name, net.id, false, net.id === data.vlan_id)));
+            vlanSelect.onchange = () => { const selectedNet = (SYSTEM_CONFIG.networks || []).find(n => n.id === vlanSelect.value); buildIpInput(selectedNet ? selectedNet.cidr : ""); };
+            vlanSelect.dispatchEvent(new Event('change'));
+            const ipVal = data.ip_assignment && data.ip_assignment.type === 'static' ? data.ip_assignment.ip : '';
+            if (ipContainer.querySelector('[name=ip-full]')) { ipContainer.querySelector('[name=ip-full]').value = ipVal; }
+            else if (ipVal) { ipVal.split('.').forEach((o, i) => { if (i == 3) form.querySelector('[name=ip-octet-3]').value = o; }); }
+
+            const qosSelect = form.querySelector('#edit-qos'); qosSelect.innerHTML = ''; qosSelect.add(new Option('Default', ''));
+            for (const [name, policy] of Object.entries(SYSTEM_CONFIG.qos_policies || {})) {
+                qosSelect.add(new Option(policy.description || name, name, false, name === data.qos_policy));
+            }
+
+            const schedule = data.schedule || {};
+            form.querySelector('#edit-schedule-enabled').checked = schedule.enabled || false;
+            form.querySelector('#edit-schedule-mode').value = (schedule.block_during_schedule === false) ? 'allow' : 'block';
+            form.querySelector('#edit-schedule-start').value = schedule.start_time || '';
+            form.querySelector('#edit-schedule-end').value = schedule.end_time || '';
+            form.querySelectorAll('[name=schedule-days]').forEach(cb => cb.checked = (schedule.days || []).includes(cb.value));
+
+            modal.showModal();
+        }
+
+        async function handleFormSubmit(e) {
+            e.preventDefault();
+            const form = e.target;
+            const mac = form.querySelector('#edit-mac').value;
+            const ip = getIpFromInput();
+            let schedule = null;
+            if (form.querySelector('#edit-schedule-enabled').checked) {
+                const start = form.querySelector('#edit-schedule-start').value;
+                const end = form.querySelector('#edit-schedule-end').value;
+                if (!start || !end) { showToast('Start and End times are required for an enabled schedule.', 'error'); return; }
+                schedule = {
+                    enabled: true, block_during_schedule: form.querySelector('#edit-schedule-mode').value === 'block',
+                    start_time: start, end_time: end,
+                    days: Array.from(form.querySelectorAll('[name=schedule-days]:checked')).map(cb => cb.value)
+                };
+            }
+
+            const payload = {
+                description: form.querySelector('#edit-description').value, hostname: form.querySelector('#edit-hostname').value,
+                vlan_id: form.querySelector('#edit-vlan').value, ip: ip,
+                network_access_blocked: form.querySelector('#edit-blocked').checked,
+                qos_policy: form.querySelector('#edit-qos').value,
+                schedule: schedule, trigger_sync: true
+            };
+
+            const response = await fetch(`/api/update_host_config/${mac}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+            const data = await response.json();
+            document.getElementById('edit-host-modal').close();
+            if (response.ok) { showToast('Configuration saved!', 'success'); }
+            else { showToast(`Save Failed: ${data.message}`, 'error'); }
         }
     </script>
 </body>
