@@ -2,6 +2,7 @@ import os
 import subprocess
 import json
 import typer
+import threading
 from pathlib import Path
 from typing import List, Dict, Any, Tuple, Optional
 
@@ -10,25 +11,14 @@ from typing import List, Dict, Any, Tuple, Optional
 def run_command(command: list, check: bool = False) -> dict:
     """Runs a shell command and returns its output, stderr, and return code."""
     try:
-        result = subprocess.run(
-            command,
-            capture_output=True,
-            text=True,
-            check=check,
-            timeout=10
-        )
-        return {
-            "stdout": result.stdout.strip(),
-            "stderr": result.stderr.strip(),
-            "returncode": result.returncode,
-        }
+        result = subprocess.run(command, capture_output=True, text=True, check=check, timeout=10)
+        return {"stdout": result.stdout.strip(), "stderr": result.stderr.strip(), "returncode": result.returncode}
     except FileNotFoundError:
         return {"stdout": "", "stderr": f"Command not found: {command[0]}", "returncode": 127}
     except subprocess.CalledProcessError as e:
         return {"stdout": e.stdout.strip(), "stderr": e.stderr.strip(), "returncode": e.returncode}
     except subprocess.TimeoutExpired:
         return {"stdout": "", "stderr": f"Command timed out: {' '.join(command)}", "returncode": 124}
-
 
 def check_root_privileges(action: str = "perform this action"):
     """Exits with an error if the script is not run as root."""
@@ -46,7 +36,6 @@ def get_host_by_mac(config: Dict, mac_address: str) -> Tuple[Optional[Dict], Opt
         if host.get("mac", "").lower() == mac_lower:
             return host, i
     return None, None
-
 
 def get_network_config_by_id_or_name(config: Dict, identifier: str) -> Optional[Dict]:
     """Finds a network configuration from server_config.json by its id or name."""
@@ -73,12 +62,10 @@ def get_active_leases(leases_file_path_str: str) -> list:
         typer.echo(f"Warning: Could not read leases file at {leases_file_path_str}: {e}", err=True)
     return leases
 
-
 def get_shorewall_dynamic_blocked() -> List[str]:
     """Parses `shorewall show dynamic` to get a list of currently blocked IPs."""
     result = run_command(["sudo", "shorewall", "show", "dynamic"])
     if result["returncode"] != 0:
-        typer.echo("Warning: Could not get dynamic list from Shorewall.", err=True)
         return []
     blocked_ips = []
     lines = result["stdout"].splitlines()
@@ -99,8 +86,7 @@ def print_item_details(item: Dict, title: str):
     """Prints a formatted key-value summary of a dictionary."""
     typer.echo(typer.style(f"\n--- {title} ---", fg=typer.colors.CYAN, bold=True))
     if not item:
-        typer.echo("Not found or no details available.")
-        return
+        typer.echo("Not found or no details available."); return
     for key, value in item.items():
         key_styled = typer.style(f"{key.replace('_', ' ').capitalize():<25}", fg=typer.colors.WHITE)
         if isinstance(value, bool):
@@ -120,37 +106,43 @@ def generate_tc_commands(config: Dict, interface: str, parent_qdisc_id: str = "1
     """Generates a list of tc commands for setting up QoS policies."""
     gs = config.get("global_settings", {})
     qos_policies = gs.get("qos_policies", {})
-    if not qos_policies:
-        return ["# No QoS policies defined in config."]
-
+    if not qos_policies: return ["# No QoS policies defined in config."]
     wan_config = get_network_config_by_id_or_name(config, gs.get("wan_network_id", "wan"))
-    if not wan_config or "bandwidth" not in wan_config:
-        return ["# WAN network or bandwidth not configured."]
-        
+    if not wan_config or "bandwidth" not in wan_config: return ["# WAN network or bandwidth not configured."]
     upload_rate = wan_config["bandwidth"]["upload_mbit"]
-
     commands = [
         f"tc qdisc del dev {interface} root 2> /dev/null",
         f"tc qdisc add dev {interface} root handle {parent_qdisc_id} htb default 10",
         f"tc class add dev {interface} parent {parent_qdisc_id} classid {parent_qdisc_id}0 htb rate {upload_rate}mbit ceil {upload_rate}mbit",
     ]
-
     for policy_name, policy_details in qos_policies.items():
-        prio = policy_details.get("priority", 99)
-        rate_mbit = policy_details.get("guaranteed_mbit", 1)
-        ceil_mbit = policy_details.get("limit_mbit", upload_rate)
-        fw_mark = policy_details.get("fw_mark")
-
+        prio, rate_mbit, ceil_mbit, fw_mark = (policy_details.get(k) for k in ["priority", "guaranteed_mbit", "limit_mbit", "fw_mark"])
         if fw_mark is None: continue
-
         class_id = f"{parent_qdisc_id}{fw_mark}"
-
-        # Create TC class
-        commands.append(
-            f"tc class add dev {interface} parent {parent_qdisc_id}0 classid {class_id} "
-            f"htb rate {rate_mbit}mbit ceil {ceil_mbit}mbit prio {prio}"
-        )
-        # Create TC filter to direct marked packets to this class
-        commands.append(f"tc filter add dev {interface} protocol ip parent {parent_qdisc_id}0 prio {prio} handle {fw_mark} fw classid {class_id}")
-    
+        commands.append(f"tc class add dev {interface} parent {parent_qdisc_id}0 classid {class_id} htb rate {rate_mbit or 1}mbit ceil {ceil_mbit or upload_rate}mbit prio {prio or 99}")
+        commands.append(f"tc filter add dev {interface} protocol ip parent {parent_qdisc_id}0 prio {prio or 99} handle {fw_mark} fw classid {class_id}")
     return commands
+
+# --- Network Status ---
+
+def is_host_online(ip: str) -> bool:
+    """Pings a host once to check for liveness. Returns True if online, False otherwise."""
+    # -c 1: one packet, -W 1: 1-second timeout
+    result = subprocess.run(["ping", "-c", "1", "-W", "1", ip], capture_output=True)
+    return result.returncode == 0
+
+def _ping_worker(ip: str, results: Dict):
+    """Worker function for threading pings."""
+    results[ip] = is_host_online(ip)
+
+def check_multiple_hosts_online(ips: List[str]) -> Dict[str, bool]:
+    """Pings a list of IP addresses concurrently and returns their online status."""
+    threads = []
+    results = {}
+    for ip in ips:
+        thread = threading.Thread(target=_ping_worker, args=(ip, results))
+        threads.append(thread)
+        thread.start()
+    for thread in threads:
+        thread.join()
+    return results
