@@ -1,81 +1,72 @@
-# ... (All imports and helper functions are the same as the last complete version) ...
-# ... I am providing the full file to prevent any errors ...
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Edit Host - inetctl</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css" />
+    <style>
+        .delete-form {
+            margin-top: 2rem;
+        }
 
-import base64
-import ipaddress
-import os
-import re
-import sqlite3
-import sys
-import time
-from collections import OrderedDict
-from typing import Any, Dict, List, Optional, Tuple
+        .grid-buttons {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+        }
+    </style>
+</head>
+<body>
+    <main class="container">
+        <header>
+            <nav>
+                <ul><li><a href="{{ url_for('home') }}">← Back to Dashboard</a></li></ul>
+            </nav>
+            <h1>Edit Host</h1>
+            <p>Editing configuration for <strong>{{ host.hostname }}</strong> ({{ host.mac }})</p>
+        </header>
 
-import typer
-import yaml
-from flask import (Flask, abort, flash, jsonify, redirect, render_template,
-                   request, url_for)
+        <article>
+            <form action="{{ url_for('edit_host', host_mac=host.mac) }}" method="post">
 
-from inetctl.cli.access import app as access_cli_app
-from inetctl.core.config_loader import load_config, save_config
-from inetctl.core.netplan import (add_route_to_netplan_interface,
-                                  delete_route_from_netplan_interface,
-                                  get_all_netplan_interfaces,
-                                  update_netplan_interface)
-from inetctl.core.utils import (check_multiple_hosts_online,
-                                check_root_privileges, get_active_leases,
-                                get_host_config_by_id, get_subnet_from_netplan,
-                                run_command)
+                <label for="description">Description</label>
+                <input type="text" id="description" name="description" value="{{ host.description }}" required>
 
-app = Flask(__name__, template_folder="templates")
-app.secret_key = os.urandom(24)
-DB_FILE = "./inetctl_stats.db"
+                <label for="hostname">Hostname</label>
+                <input type="text" id="hostname" name="hostname" value="{{ host.hostname }}" required>
 
-def get_dashboard_data() -> Dict[str, Any]:
-    # ... (This function is complete and correct from the previous step) ...
-    pass
+                <label for="vlan_id">Assigned Network (VLAN)</label>
+                <select id="vlan_id" name="vlan_id">
+                    {% for network in networks %}
+                    <option value="{{ network.id }}" {% if host.vlan_id= =network.id %}selected{% endif %}>
+                        {{ network.name }}
+                    </option>
+                    {% endfor %}
+                </select>
 
-@app.route("/")
-def home():
-    device_groups = get_dashboard_data()
-    return render_template("home.html", device_groups=device_groups)
+                <label for="ip_assignment.ip">Static IP Address (optional)</label>
+                <input type="text" id="ip_assignment.ip" name="ip_assignment.ip" value="{{ host.ip_assignment.ip if host.ip_assignment.type == 'static' else '' }}" placeholder="Leave blank for DHCP">
 
-# ... (All other routes are included below) ...
-# ... (favicon, qos_status_page, host_detail, api_bandwidth, etc...)
+                <label for="network_access_blocked">
+                    <input type="checkbox" id="network_access_blocked" name="network_access_blocked" role="switch" {% if host.network_access_blocked %}checked{% endif %}>
+                    Network Access Blocked
+                </label>
 
-@app.route("/host/edit/<host_id>", methods=['GET', 'POST'])
-def edit_host(host_id):
-    """Displays and handles the form for editing a host's properties."""
-    config = load_config(force_reload=True)
-    host_info = get_host_config_by_id(config, host_id)
-    if not host_info:
-        abort(404)
+                <footer class="grid-buttons">
+                    <button type="submit">Save Changes</button>
+                    <a href="{{ url_for('home') }}" role="button" class="secondary">Cancel</a>
+                </footer>
+            </form>
 
-    if request.method == 'POST':
-        try:
-            # Find the host in the original list to modify it
-            for i, host in enumerate(config['hosts_dhcp_reservations']):
-                if host['id'] == host_id:
-                    # Update the values from the form
-                    config['hosts_dhcp_reservations'][i]['description'] = request.form.get('description', host.get('description'))
-                    
-                    tc_policy_id = request.form.get('tc_policy_id')
-                    if tc_policy_id:
-                        config['hosts_dhcp_reservations'][i]['tc_policy_id'] = tc_policy_id
-                    elif 'tc_policy_id' in config['hosts_dhcp_reservations'][i]:
-                        del config['hosts_dhcp_reservations'][i]['tc_policy_id'] # Remove if 'None' was selected
-                    
-                    break
-            
-            if save_config(config):
-                flash(f"Host '{host_id}' updated successfully.", "success")
-            else:
-                flash(f"Error saving configuration for host '{host_id}'.", "error")
-            
-            return redirect(url_for('home'))
-        except Exception as e:
-            flash(f"An error occurred while updating the host: {e}", "error")
-            return redirect(url_for('edit_host', host_id=host_id))
+            <hr>
 
-    policies = config.get("traffic_control_policies", [])
-    return render_template("edit_host.html", host=host_info, policies=policies)
+            <form class="delete-form" action="{{ url_for('delete_host', host_mac=host.mac) }}" method="post" onsubmit="return confirm('WARNING: This will permanently delete the host from your configuration. Are you absolutely sure?');">
+                <button type="submit" class="contrast outline">Delete This Host</button>
+            </form>
+
+        </article>
+
+    </main>
+</body>
+</html>
