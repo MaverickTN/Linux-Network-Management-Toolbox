@@ -1,99 +1,62 @@
 import json
-import os
-import sys
-import tempfile
+import yaml
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Dict, Optional
 
-import typer
+# Now depends on the netplan parser to be self-aware
+from inetctl.core.netplan import get_all_netplan_interfaces
 
-# --- Global Configuration Variables ---
-APP_CONFIG: Optional[Dict[str, Any]] = None
-LOADED_CONFIG_PATH: Optional[Path] = None
-
+CONFIG_SEARCH_PATHS = ["./server_config.json", Path.home() / ".config/inetctl/server_config.json"]
 
 def find_config_file() -> Optional[Path]:
-    """Tries to find the configuration file in predefined locations."""
-    env_path_str = os.environ.get("INETCTL_CONFIG")
-    if env_path_str:
-        env_path = Path(env_path_str)
-        if env_path.exists() and env_path.is_file():
-            return env_path.resolve()
-        else:
-            typer.echo(typer.style(f"Error: INETCTL_CONFIG set to '{env_path_str}' but file not found.", fg=typer.colors.RED, bold=True))
-            raise typer.Exit(code=1)
-
-    current_dir_config_path = Path("./server_config.json")
-    home_config_path = Path.home() / ".config" / "inetctl" / "server_config.json"
-
-    if current_dir_config_path.exists() and current_dir_config_path.is_file():
-        return current_dir_config_path.resolve()
-    if home_config_path.exists() and home_config_path.is_file():
-        return home_config_path.resolve()
-        
+    for path in CONFIG_SEARCH_PATHS:
+        if Path(path).exists(): return Path(path)
     return None
 
-def load_config(force_reload: bool = False) -> Dict[str, Any]:
-    """Loads the configuration file. Caches after first load unless force_reload is True."""
-    global APP_CONFIG, LOADED_CONFIG_PATH
-
-    is_init_command = "config" in sys.argv and "init" in sys.argv
-    is_web_command = "web" in sys.argv
-
-    if APP_CONFIG is not None and not force_reload:
-        return APP_CONFIG
-
-    config_path = find_config_file()
-    
-    if not config_path:
-        if is_init_command or is_web_command:
-            return {}
-        typer.echo(typer.style("Error: 'server_config.json' not found. Run 'inetctl config init' first.", fg=typer.colors.RED, bold=True))
-        raise typer.Exit(code=1)
-
-    LOADED_CONFIG_PATH = config_path
-
+def load_config(config_path: Optional[Path] = None) -> Dict:
+    path = config_path or find_config_file()
+    if not path: return {}
     try:
-        with open(config_path, "r") as f:
-            APP_CONFIG = json.load(f)
-        if not isinstance(APP_CONFIG, dict): 
-            raise ValueError("Configuration root must be a JSON object.")
-            
-    except Exception as e:
-        typer.echo(typer.style(f"Error loading configuration from {config_path}: {e}", fg=typer.colors.RED, bold=True))
-        APP_CONFIG = None
-        raise typer.Exit(code=1)
-        
-    return APP_CONFIG
+        with open(path, "r") as f:
+            config = json.load(f)
+            # --- NEW SELF-CONFIGURING LOGIC ---
+            sync_networks_from_netplan(config)
+            return config
+    except (IOError, json.JSONDecodeError): return {}
 
-def save_config(config_data: Dict[str, Any], path_override: Optional[Path] = None) -> bool:
-    """Safely saves the provided configuration data."""
-    global APP_CONFIG, LOADED_CONFIG_PATH
+def save_config(config_data: Dict, config_path: Optional[Path] = None):
+    path = config_path or find_config_file()
+    if not path:
+        # If no config exists, create it in the user's home directory
+        path = CONFIG_SEARCH_PATHS[-1]
+        path.parent.mkdir(parents=True, exist_ok=True)
     
-    save_path = path_override or LOADED_CONFIG_PATH
-    
-    if not save_path:
-        typer.echo(typer.style("Error: Cannot save configuration, file path is unknown.", fg=typer.colors.RED, bold=True))
-        return False
+    with open(path, "w") as f: json.dump(config_data, f, indent=2)
 
-    try:
-        save_path.parent.mkdir(parents=True, exist_ok=True)
-        fd, temp_path_str = tempfile.mkstemp(dir=str(save_path.parent))
-        with os.fdopen(fd, "w") as tmp_file:
-            json.dump(config_data, tmp_file, indent=2)
-            tmp_file.write('\n')
-        
-        os.replace(temp_path_str, str(save_path))
-        
-        if not path_override:
-            APP_CONFIG = config_data
-        
-        if "web" not in sys.argv:
-            typer.echo(typer.style(f"Successfully saved configuration to {save_path}", fg=typer.colors.GREEN))
-        return True
-    except Exception as e:
-        typer.echo(typer.style(f"Error saving configuration to {save_path}: {e}", fg=typer.colors.RED, bold=True))
-        if 'temp_path_str' in locals() and Path(temp_path_str).exists():
-            try: Path(temp_path_str).unlink()
-            except OSError: pass
-        return False
+def sync_networks_from_netplan(config: Dict):
+    """
+    Ensures the 'networks' list in server_config.json is in sync with the
+    system's actual Netplan configuration for VLANs and Bridges.
+    This fixes the 'missing tabs' problem.
+    """
+    netplan_ifaces = get_all_netplan_interfaces()
+    if not netplan_ifaces: return
+
+    config.setdefault("networks", [])
+    config_iface_ids = {net['id'] for net in config['networks']}
+    
+    # Check for vlans and bridges from netplan
+    for iface_type in ['vlans', 'bridges']:
+        for iface_id in netplan_ifaces.get(iface_type, []):
+            if iface_id not in config_iface_ids:
+                # Add the missing interface to our config
+                new_net = {
+                    "id": iface_id,
+                    "name": iface_id.replace('vlan', 'VLAN ').capitalize(), # e.g. vlan15 -> VLAN 15
+                    "purpose": "unassigned"
+                }
+                config["networks"].append(new_net)
+                print(f"Discovered and auto-added new network from Netplan: {iface_id}")
+    
+    # Sort for consistency
+    config['networks'] = sorted(config['networks'], key=lambda x: x['id'])

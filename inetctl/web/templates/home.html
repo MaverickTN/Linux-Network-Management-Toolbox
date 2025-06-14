@@ -40,7 +40,6 @@
             font-size: 0.8em;
             font-weight: bold;
             color: #ffffff;
-            text-shadow: 1px 1px 2px rgba(0,0,0,0.2);
         }
 
         .reserved {
@@ -95,7 +94,6 @@
 
         .stats-text {
             font-size: 0.8em;
-            color: var(--pico-muted-color);
             white-space: nowrap;
         }
 
@@ -112,79 +110,61 @@
 </head>
 <body>
     <main class="container">
-        <!-- Navigation, Action Buttons, and VLAN Tabs are unchanged -->
+        <nav>
+            <ul><li><a href="{{ url_for('home') }}"><h1>inetctl</h1></a></li></ul>
+            <ul>
+                {% if current_user.role == 'admin' %}
+                <li><a href="{{ url_for('logs') }}" role="button" class="secondary outline">Audit Logs</a></li>{% endif %}
+                <li><a href="{{ url_for('logout') }}" role="button" class="contrast">Logout ({{ current_user.username }})</a></li>
+            </ul>
+        </nav>
+        {% if current_user.role == 'admin' %}
+        <details class="net-actions">
+            <summary role="button" class="secondary">Network Configuration (Netplan)</summary>
+            <div class="grid"> <button onclick="document.getElementById('add-vlan-modal').showModal()">Add New VLAN</button> <button class="contrast" onclick="applyNetplan()">Apply Netplan Changes</button> </div>
+        </details>{% endif %}
+        <tabs>{% for vlan_id in all_vlan_keys %}<tab {% if loop.first %}active{% endif %}>{{ network_map.get(vlan_id, vlan_id) }}</tab>{% endfor %}</tabs>
         <div class="tab-contents">
-            {% for vlan_id in all_vlan_keys %}
-            <div class="tab-content" {% if loop.first %}style="display: block;" {% endif %}>
-                <!-- Active Devices Table Header -->
-                <div class="table-container">
+            {% for vlan_id in all_vlan_keys %}<div class="tab-content" {% if loop.first %}style="display: block;" {% endif %}>
+                <div class="grid" style="align-items: center;"><h4>Active Devices</h4>{% if current_user.role == 'admin' %}<div style="text-align: right;"><button class="secondary outline" onclick="queueVlanToggle('{{vlan_id}}', true)">Block VLAN</button><button class="secondary" onclick="queueVlanToggle('{{vlan_id}}', false)">Unblock VLAN</button></div>{% endif %}</div><div class="table-container">
                     <table>
-                        <thead>
-                            <tr>
-                                <th>Status</th>
-                                <th>Assignment</th>
-                                <th>Description / Hostname</th>
-                                <th>MAC / IP</th>
-                                <th style="text-align: right;">Live Stats</th>
-                                <th style="text-align: right;">Actions</th>
-                            </tr>
-                        </thead>
+                        <thead><tr><th>Status</th><th>Assignment</th><th>Description/Hostname</th><th>MAC/IP</th><th style="text-align: right;">Actions</th></tr></thead>
                         <tbody>
                             {% for device in active_by_vlan.get(vlan_id, []) %}
-                            <tr>
-                                <td><span class="status-dot {{ 'blocked' if device.network_access_blocked else 'online' }}"></span></td>
-                                <td><span class="assignment-badge {{ device.assignment_status|lower }}">{{ device.assignment_status }}</span></td>
-                                <td><strong>{{ device.description }}</strong><br><small>{{ device.hostname }}</small></td>
-                                <td><small>{{ device.mac }}<br>{{ device.ip }}</small></td>
-                                <td style="text-align: right;" class="stats-text" id="stats-text-{{ device.mac.replace(':','') }}">
-                                    DL: 0.00 Mbps<br>UL: 0.00 Mbps
-                                </td>
-                                <td class="host-actions">
-                                    <button class="action-button outline" onclick="toggleChart('{{ device.mac.replace(':', '') }}')" title="Toggle Live Graph">📊</button>
-                                    {% if current_user.role in ['admin', 'operator'] %}
-                                    <button class="action-button outline" onclick="openEditModal('{{ device.mac }}')" title="Edit Host">⚙️</button>
-                                    {% endif %}
-                                </td>
-                            </tr>
-                            <!-- Hidden chart row with corrected colspan -->
-                            <tr id="chart-row-{{ device.mac.replace(':', '') }}" style="display: none;">
-                                <td colspan="6" style="padding: 1rem !important; background-color: var(--pico-card-background-color);">
-                                    <canvas id="chart-{{ device.mac.replace(':', '') }}" height="80"></canvas>
-                                </td>
-                            </tr>
+                            <tr><td><span class="status-dot {{ 'blocked' if device.network_access_blocked else 'online' }}"></span></td><td><span class="assignment-badge {{ device.assignment_status|lower }}">{{ device.assignment_status }}</span></td><td><strong>{{ device.description }}</strong><br><small>{{ device.hostname }}</small></td><td><small>{{ device.mac }}<br>{{ device.ip }}</small></td><td class="host-actions">{% if current_user.role in ['admin', 'operator'] %}<button class="action-button outline" onclick="openEditModal('{{ device.mac }}')" title="Edit Host">⚙️</button>{% endif %}</td></tr>
                             {% else %}
-                            <tr><td colspan="6">No active devices detected in this network.</td></tr> {% endfor %}
+                            <tr><td colspan="5">No active devices in this network.</td></tr>{% endfor %}
                         </tbody>
                     </table>
                 </div>
-                <!-- Offline Reservations Table, unchanged, but has its colspan corrected as well -->
-                {% if offline_by_vlan.get(vlan_id, []) %}
-                <h4>Offline Reservations</h4>
-                <div class="table-container">
+                {% if offline_by_vlan.get(vlan_id, []) %}<h4>Offline Reservations</h4><div class="table-container">
                     <table>
-                        <thead><tr><th>Status</th><th>Description</th><th>MAC / Configured IP</th><th style="text-align: right;">Actions</th></tr></thead>
+                        <thead><tr><th>Status</th><th>Description</th><th>MAC / IP</th><th style="text-align: right;">Actions</th></tr></thead>
                         <tbody>
                             {% for device in offline_by_vlan.get(vlan_id) %}
-                            <tr>
-                                <td><span class="status-dot {{ 'blocked' if device.network_access_blocked else 'offline' }}"></span></td>
-                                <td><strong>{{ device.description }}</strong><br><small>{{ device.hostname }}</small></td>
-                                <td><small>{{ device.mac }}<br>{{ device.ip_assignment.ip if device.ip_assignment and device.ip_assignment.type == 'static' else 'DHCP' }}</small></td>
-                                <td class="host-actions">{% if current_user.role in ['admin', 'operator'] %}<button class="action-button outline" onclick="openEditModal('{{ device.mac }}')" title="Edit Host">⚙️</button>{% endif %}</td>
-                            </tr>
-                            {% endfor %}
+                            <tr><td><span class="status-dot {{ 'blocked' if device.network_access_blocked else 'offline' }}"></span></td><td><strong>{{ device.description }}</strong><br><small>{{ device.hostname }}</small></td><td><small>{{ device.mac }}<br>{{ device.ip_assignment.ip if device.ip_assignment and device.ip_assignment.type == 'static' else 'DHCP' }}</small></td><td class="host-actions">{% if current_user.role in ['admin', 'operator'] %}<button class="action-button outline" onclick="openEditModal('{{ device.mac }}')" title="Edit Host">⚙️</button>{% endif %}</td></tr>{% endfor %}
                         </tbody>
                     </table>
                 </div>{% endif %}
-            </div>
-            {% endfor %}
+            </div>{% endfor %}
         </div>
     </main>
-
-    <!-- The Super Edit Modal... its HTML is unchanged -->
-    <dialog id="edit-host-modal">...</dialog>
-
+    <dialog id="add-vlan-modal"><article><header><a href="#close" aria-label="Close" class="close" onclick="this.closest('dialog').close()"></a><strong>Add New VLAN</strong></header><form id="add-vlan-form" onsubmit="handleAddVlan(event)"><label>VLAN ID (2-4094)<input type="number" name="id" min="2" max="4094" required></label><label>Name (e.g., IoT, Guest)<input type="text" name="name" required></label><label>Parent Interface (e.g., eth1)<input type="text" name="link" required></label><label>Subnet (e.g., 192.168.20.1/24)<input type="text" name="address" required></label><footer><button type="button" class="secondary" onclick="this.closest('dialog').close()">Cancel</button><button type="submit">Create VLAN</button></footer></form></article></dialog>
+    <dialog id="edit-host-modal"><article><header><a href="#close" aria-label="Close" class="close" onclick="document.getElementById('edit-host-modal').close()"></a><strong id="modal-title">Edit Host</strong></header><form id="edit-host-form" onsubmit="handleFormSubmit(event)"><input type="hidden" id="edit-mac" name="mac"><div class="form-grid"><label>Description<input type="text" id="edit-description" name="description" required></label><label>Hostname<input type="text" id="edit-hostname" name="hostname" required></label></div><div class="form-grid"><label>VLAN<select id="edit-vlan" name="vlan_id"></select></label><label>Static IP (Optional)<div id="ip-input" class="ip-input-group"></div></label></div><hr><h6>Access Control</h6><label><input type="checkbox" id="edit-blocked" name="network_access_blocked" role="switch"> Block Network Access</label><details><summary>Access Schedule</summary><label><input type="checkbox" id="edit-schedule-enabled" name="schedule-enabled" role="switch"> Enable Scheduling</label><div class="form-grid"><label>Mode<select id="edit-schedule-mode" name="schedule-mode"><option value="block">Block during schedule</option><option value="allow">Allow only during schedule</option></select></label><div></div><label>Start Time <input type="time" name="schedule-start_time" id="edit-schedule-start"></label><label>End Time <input type="time" name="schedule-end_time" id="edit-schedule-end"></label></div><fieldset><legend>Days</legend><div class="grid" style="grid-template-columns: repeat(4, 1fr);"><label><input type="checkbox" name="schedule-days" value="mon">Mon</label><label><input type="checkbox" name="schedule-days" value="tue">Tue</label><label><input type="checkbox" name="schedule-days" value="wed">Wed</label><label><input type="checkbox" name="schedule-days" value="thu">Thu</label><label><input type="checkbox" name="schedule-days" value="fri">Fri</label><label><input type="checkbox" name="schedule-days" value="sat">Sat</label><label><input type="checkbox" name="schedule-days" value="sun">Sun</label></div></fieldset></details><hr><h6>QoS</h6><label>Policy<select id="edit-qos" name="qos_policy"></select></label><footer><button type="button" class="secondary" onclick="document.getElementById('edit-host-modal').close()">Cancel</button><button type="submit">Save</button></footer></form></article></dialog>
     <script>
-        // --- The ENTIRE JavaScript block from the last COMPLETE response should be used here ---
+    let SYSTEM_CONFIG={};
+    document.addEventListener('DOMContentLoaded',async()=>{const e=document.querySelectorAll("tabs tab"),t=document.querySelectorAll(".tab-content");e.forEach((a,n)=>{a.addEventListener("click",()=>{e.forEach(e=>e.removeAttribute("active")),a.setAttribute("active",""),t.forEach(e=>e.style.display="none"),t[n]&&(t[n].style.display="block")})});try{const e=await fetch("/api/system_config");SYSTEM_CONFIG=await e.json()}catch(e){console.error("Failed to load system config")}});
+    function showToast(e,t="info"){Toastify({text:e,duration:5e3,gravity:"top",position:"right",stopOnFocus:!0,style:{background:`linear-gradient(to right, ${{success:"#00b09b",error:"#ff5f6d",info:"#2b82cf"}[t]||"#2b82cf"}, #61D5B4)`}}).showToast()}
+    async function queueJob(e,t={}){showToast(`Queueing job: ${e}...`,"info");try{const a=await fetch("/api/submit_job",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({job_type:e,payload:t})}),n=await a.json();a.ok?(showToast(`Job #${n.job_id} queued!`,"success"),pollJobStatus(n.job_id)):showToast(`Error: ${n.message||"Unknown error"}`,"error")}catch(e){showToast(`Network Error: ${e}`,"error")}}
+    function pollJobStatus(e){const t=setInterval(async()=>{try{const a=await fetch(`/api/job_status/${e}`),n=await a.json();"completed"===n.status||"failed"===n.status?(clearInterval(t),showToast(`Job #${e} (${n.job_type}) finished: ${n.status.toUpperCase()}`,"completed"===n.status?"success":"error"),setTimeout(()=>window.location.reload(),1e3)):showToast(`Job #${e} is ${n.status}...`)}catch(a){clearInterval(t),showToast(`Error checking job status: ${a}`,"error")}},3e3)}
+    function queueVlanToggle(e,t){confirm(`This will queue a job to ${t?"block":"unblock"} ALL hosts with reservations in this VLAN. Are you sure?`)&&queueJob("api:vlan_toggle_access",{vlan_id:e,block:t})}
+    const ipContainer=document.getElementById("ip-input");
+    function buildIpInput(e=""){if(ipContainer.innerHTML="",""==e||!e.includes("/")){const t=document.createElement("input");t.type="text",t.name="ip-full",t.placeholder="e.g., 192.168.1.100",ipContainer.appendChild(t)}else{const[t,a]=e.split("/"),n=t.split(".");n.forEach((e,t)=>{const a=document.createElement("input");a.type="text",a.name=`ip-octet-${t}`,a.maxLength=3,a.pattern="\\d*",t<3&&(a.value=e,a.readOnly=!0,a.style.backgroundColor="var(--pico-muted-background-color)"),ipContainer.appendChild(a),t<3&&ipContainer.appendChild(document.createTextNode("."))})}}
+    function getIpFromInput(){if(ipContainer.querySelector("[name=ip-full]"))return ipContainer.querySelector("[name=ip-full]").value;let e="";let t=!1;for(let a=0;a<4;a++){const n=ipContainer.querySelector(`[name=ip-octet-${a}]`).value;n&&(t=!0),e+=n+(a<3?".":"")}return t?e.endsWith(".")?null:e:null}
+    async function openEditModal(e){const t=document.getElementById("edit-host-modal"),a=document.getElementById("edit-host-form");a.reset();const n=await fetch(`/api/host_details/${e}`);if(!n.ok)return void showToast("Error fetching host details.","error");const o=await n.json();document.getElementById("modal-title").textContent=`Edit: ${o.description||o.hostname||e}`,a.querySelector("#edit-mac").value=e,a.querySelector("#edit-description").value=o.description||"",a.querySelector("#edit-hostname").value=o.hostname||"",a.querySelector("#edit-blocked").checked=o.network_access_blocked||!1;const i=a.querySelector("#edit-vlan");i.innerHTML="",(SYSTEM_CONFIG.networks||[]).forEach(e=>i.add(new Option(e.name,e.id,!1,e.id===o.vlan_id))),i.onchange=()=>{const e=(SYSTEM_CONFIG.networks||[]).find(e=>e.id===i.value);buildIpInput(e?e.cidr:"")},i.dispatchEvent(new Event("change"));const c=o.ip_assignment&&"static"===o.ip_assignment.type?o.ip_assignment.ip:"";if(ipContainer.querySelector("[name=ip-full]"))ipContainer.querySelector("[name=ip-full]").value=c;else if(c){const e=c.split(".");e.forEach((t,a)=>{3==a&&(form.querySelector("[name=ip-octet-3]").value=t)})}const l=a.querySelector("#edit-qos");l.innerHTML="",l.add(new Option("Default",""));for(const[s,r]of Object.entries(SYSTEM_CONFIG.qos_policies||{}))l.add(new Option(r.description||s,s,!1,s===o.qos_policy));const u=o.schedule||{};a.querySelector("#edit-schedule-enabled").checked=u.enabled||!1,a.querySelector("#edit-schedule-mode").value=!1===u.block_during_schedule?"allow":"block",a.querySelector("#edit-schedule-start").value=u.start_time||"",a.querySelector("#edit-schedule-end").value=u.end_time||"",a.querySelectorAll("[name=schedule-days]").forEach(e=>e.checked=(u.days||[]).includes(e.value)),t.showModal()}
+    async function handleFormSubmit(e){e.preventDefault();const t=e.target,a=t.querySelector("#edit-mac").value,n=getIpFromInput();let o=null;if(t.querySelector("#edit-schedule-enabled").checked){const e=t.querySelector("#edit-schedule-start").value,a=t.querySelector("#edit-schedule-end").value;if(!e||!a)return void showToast("Start and End times are required for an enabled schedule.","error");o={enabled:!0,block_during_schedule:"block"===t.querySelector("#edit-schedule-mode").value,start_time:e,end_time:a,days:Array.from(t.querySelectorAll('[name="schedule-days"]:checked')).map(e=>e.value)}}const i={description:t.querySelector("#edit-description").value,hostname:t.querySelector("#edit-hostname").value,vlan_id:t.querySelector("#edit-vlan").value,ip:n,network_access_blocked:t.querySelector("#edit-blocked").checked,qos_policy:t.querySelector("#edit-qos").value,schedule:o,trigger_sync:!0},c=await fetch(`/api/update_host_config/${a}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(i)}),l=await c.json();document.getElementById("edit-host-modal").close(),c.ok?showToast("Configuration saved! Job queued.","success"):showToast(`Save Failed: ${l.message}`,"error")}
+    function applyNetplan(){confirm("This will apply pending system network changes and may briefly disrupt connectivity. Proceed?")&&queueJob("netplan:apply",{})}
+    async function handleAddVlan(e){e.preventDefault();const t=e.target;document.getElementById("add-vlan-modal").close(),queueJob("netplan:add_vlan",{id:t.querySelector("[name=id]").value,name:t.querySelector("[name=name]").value,link:t.querySelector("[name=link]").value,address:t.querySelector("[name=address]").value})}
     </script>
 </body>
 </html>
