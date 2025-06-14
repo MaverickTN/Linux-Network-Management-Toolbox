@@ -21,6 +21,7 @@ def load_netplan_config() -> Optional[Dict]:
 def save_netplan_config(config: Dict):
     config_file = find_netplan_config_file()
     if not config_file: raise FileNotFoundError("No Netplan config file found to save.")
+    # Use sort_keys=False to maintain a more logical order on save
     with open(config_file, 'w') as f: yaml.dump(config, f, sort_keys=False, indent=2)
 
 def get_vlan_subnets() -> Dict[str, str]:
@@ -49,7 +50,8 @@ def get_all_netplan_interfaces() -> Dict[str, List[str]]:
     if not config or 'network' not in config: return {}
     interfaces = {}
     for key, value in config['network'].items():
-        if isinstance(value, dict) and key != 'version': interfaces[key] = list(value.keys())
+        if isinstance(value, dict) and key != 'version' and key != 'ethernets':
+            interfaces[key] = list(value.keys())
     return interfaces
 
 def update_netplan_interface(iface_type: str, iface_name: str, key: str, value: str):
@@ -65,11 +67,29 @@ def add_route_to_netplan_interface(iface_type: str, iface_name: str, to: str, vi
     iface = config.get('network', {}).get(iface_type, {}).get(iface_name)
     if iface:
         iface.setdefault('routes', []).append({'to': to, 'via': via})
-        save_netplan_config(config)
-        return True
+        save_netplan_config(config); return True
+    return False
+
+def delete_route_from_netplan_interface(iface_type: str, iface_name: str, to: str, via: str):
+    """
+    Deletes a static route from a given interface.
+    This function is now included.
+    """
+    config = load_netplan_config()
+    iface = config.get('network', {}).get(iface_type, {}).get(iface_name)
+    if iface and 'routes' in iface:
+        route_to_remove = {'to': to, 'via': via}
+        if route_to_remove in iface['routes']:
+            iface['routes'].remove(route_to_remove)
+            # If routes list is now empty, remove the key for a cleaner config file
+            if not iface['routes']:
+                del iface['routes']
+            save_netplan_config(config)
+            return True
     return False
 
 def apply_netplan_config():
+    """Applies the netplan configuration using 'netplan apply'."""
     try:
         result = subprocess.run(["sudo", "netplan", "apply"], capture_output=True, text=True, check=True)
         return True, result.stdout
