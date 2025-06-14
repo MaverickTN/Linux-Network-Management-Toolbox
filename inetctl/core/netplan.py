@@ -16,23 +16,19 @@ def load_netplan_config() -> Optional[Dict]:
     config_file = find_netplan_config_file()
     if not config_file: return None
     try:
-        with open(config_file, 'r') as f:
-            return yaml.safe_load(f)
+        with open(config_file, 'r') as f: return yaml.safe_load(f)
     except (IOError, yaml.YAMLError) as e:
-        print(f"Warning: Could not load or parse netplan config: {e}")
-        return None
+        print(f"Warning: Could not load or parse netplan config: {e}"); return None
 
 def save_netplan_config(config: Dict):
     """Saves a dictionary back to the netplan configuration file."""
     config_file = find_netplan_config_file()
     if not config_file: raise FileNotFoundError("No Netplan config file found to save.")
-    with open(config_file, 'w') as f:
-        yaml.dump(config, f, indent=2)
+    with open(config_file, 'w') as f: yaml.dump(config, f, indent=2)
 
 def get_vlan_subnets() -> Dict[str, str]:
     """
     Parses netplan config to get a mapping of VLAN interface names to their subnets.
-    For example: {'vlan15': '10.0.2.0/27'}
     """
     netplan_config = load_netplan_config()
     if not netplan_config or 'network' not in netplan_config: return {}
@@ -48,19 +44,21 @@ def get_vlan_subnets() -> Dict[str, str]:
                 except ValueError: continue
     return subnets
 
-# --- Restored Functions for `inetctl network` commands ---
+# --- Functions for `inetctl network` commands ---
 
 def add_netplan_interface(iface_type: str, iface_name: str, settings: Dict):
     """Adds a new interface definition (vlan, bridge) to netplan config."""
     config = load_netplan_config()
     if 'network' not in config: config['network'] = {}
     if iface_type not in config['network']: config['network'][iface_type] = {}
-    
     config['network'][iface_type][iface_name] = settings
     save_netplan_config(config)
 
-def remove_netplan_interface(iface_type: str, iface_name: str):
-    """Removes an interface definition from netplan config."""
+def delete_netplan_interface(iface_type: str, iface_name: str):
+    """
+    Removes an interface definition from netplan config.
+    This function is now correctly named 'delete_netplan_interface'.
+    """
     config = load_netplan_config()
     if config and config.get('network', {}).get(iface_type, {}).get(iface_name):
         del config['network'][iface_type][iface_name]
@@ -70,7 +68,6 @@ def get_netplan_interfaces() -> Dict[str, List[str]]:
     """Gets a list of all configured interfaces grouped by type."""
     config = load_netplan_config()
     if not config or 'network' not in config: return {}
-    
     interfaces = {}
     for key, value in config['network'].items():
         if isinstance(value, dict) and key != 'version':
@@ -80,7 +77,6 @@ def get_netplan_interfaces() -> Dict[str, List[str]]:
 def apply_netplan_config():
     """Applies the netplan configuration using 'netplan apply'."""
     try:
-        # It's better to call the specific command rather than try/generate
         result = subprocess.run(["sudo", "netplan", "apply"], capture_output=True, text=True, check=True)
         return True, result.stdout
     except (FileNotFoundError, subprocess.CalledProcessError) as e:
