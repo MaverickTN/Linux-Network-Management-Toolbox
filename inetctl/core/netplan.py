@@ -44,8 +44,6 @@ def get_vlan_subnets() -> Dict[str, str]:
                 except ValueError: continue
     return subnets
 
-# --- Functions for `inetctl network` commands ---
-
 def add_netplan_interface(iface_type: str, iface_name: str, settings: Dict):
     """Adds a new interface definition (vlan, bridge) to netplan config."""
     config = load_netplan_config()
@@ -55,17 +53,17 @@ def add_netplan_interface(iface_type: str, iface_name: str, settings: Dict):
     save_netplan_config(config)
 
 def delete_netplan_interface(iface_type: str, iface_name: str):
-    """
-    Removes an interface definition from netplan config.
-    This function is now correctly named 'delete_netplan_interface'.
-    """
+    """Removes an interface definition from netplan config."""
     config = load_netplan_config()
     if config and config.get('network', {}).get(iface_type, {}).get(iface_name):
         del config['network'][iface_type][iface_name]
         save_netplan_config(config)
 
-def get_netplan_interfaces() -> Dict[str, List[str]]:
-    """Gets a list of all configured interfaces grouped by type."""
+def get_all_netplan_interfaces() -> Dict[str, List[str]]:
+    """
+    Gets a list of all configured interfaces grouped by type.
+    This function is now correctly named 'get_all_netplan_interfaces'.
+    """
     config = load_netplan_config()
     if not config or 'network' not in config: return {}
     interfaces = {}
