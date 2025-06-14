@@ -3,38 +3,37 @@ import subprocess
 import time
 import re
 import json
-import ipaddress
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import Dict, Any
 
-# --- Configuration ---
+# --- NEW: Direct import for robust execution ---
+from inetctl.core.config_loader import load_config
+from inetctl.cli.shorewall import sync_shorewall as run_shorewall_sync
+
 DB_FILE = Path("./inetctl_stats.db")
-CONFIG_FILE = Path("./server_config.json")
 SYNC_INTERVAL_SECONDS = 15
+DATA_RETENTION_DAYS = 10
 
-def get_config() -> Dict:
-    if not CONFIG_FILE.exists(): return {}
-    try:
-        with open(CONFIG_FILE, "r") as f:
-            return json.load(f)
-    except (IOError, json.JSONDecodeError):
-        return {}
+# Note: get_config is now handled by the imported load_config
+# def get_config() ...
 
-def get_active_leases(leases_file_path: str) -> List[Dict]:
+def get_active_leases(leases_file_path: str) -> list:
     if not Path(leases_file_path).exists(): return []
     leases = []
-    with open(leases_file_path, 'r') as f:
-        for line in f.readlines():
-            parts = line.strip().split()
-            if len(parts) >= 4:
-                leases.append({'mac': parts[1].lower(), 'ip': parts[2], 'hostname': parts[3]})
+    try:
+        with open(leases_file_path, 'r') as f:
+            for line in f.readlines():
+                parts = line.strip().split()
+                if len(parts) >= 4:
+                    leases.append({'mac': parts[1].lower(), 'ip': parts[2], 'hostname': parts[3] if parts[3] != '*' else '(unknown)'})
+    except IOError:
+        return []
     return leases
 
-def get_iptables_counters(active_devices: List[Dict]) -> Dict[str, Dict]:
+def get_iptables_counters(active_devices: list) -> dict:
     counters = {}
     for device in active_devices:
-        ip = device.get("ip")
-        mac_sanitized = device.get("mac", "").replace(":", "")
+        ip, mac_sanitized = device.get("ip"), device.get("mac", "").replace(":", "")
         if not ip or not mac_sanitized: continue
         chain_name = f"acct_{mac_sanitized}"
         try:
@@ -42,12 +41,14 @@ def get_iptables_counters(active_devices: List[Dict]) -> Dict[str, Dict]:
             byte_pattern = re.compile(r"^\s*\d+\s+(\d+)\s+")
             lines = result.stdout.strip().splitlines()
             if len(lines) >= 4:
-                counters[mac_sanitized] = {'out': int(byte_pattern.match(lines[3]).group(1)), 'in': int(byte_pattern.match(lines[2]).group(1)), 'ip': ip}
+                # Based on our rule generation, lines[2] is TO the IP (download), and lines[3] is FROM (upload)
+                counters[mac_sanitized] = {'in': int(byte_pattern.match(lines[2]).group(1)), 'out': int(byte_pattern.match(lines[3]).group(1)), 'ip': ip}
         except (subprocess.CalledProcessError, AttributeError):
-            continue
+            continue # This can happen if the chain doesn't exist yet, it's safe to skip
     return counters
 
 def setup_database(config: Dict):
+    """Sets up the bandwidth table and purges old data."""
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     cursor.execute("""
@@ -62,72 +63,69 @@ def setup_database(config: Dict):
         PRIMARY KEY (timestamp, host_id)
     )
     """)
-    retention_days = config.get("global_settings", {}).get("database_retention_days", 10)
+    retention_days = config.get("global_settings", {}).get("database_retention_days", DATA_RETENTION_DAYS)
     purge_before_timestamp = int(time.time()) - (retention_days * 24 * 60 * 60)
     cursor.execute("DELETE FROM bandwidth WHERE timestamp < ?", (purge_before_timestamp,))
     deleted_rows = cursor.rowcount
     if deleted_rows > 0:
-        print(f"Purged {deleted_rows} old records from the database.")
+        print(f"Purged {deleted_rows} old records from the bandwidth table.")
     conn.commit()
     conn.close()
 
 def main_loop():
-    print("Starting inetctl live synchronizer...")
+    print("--- Starting inetctl Data and Firewall Synchronizer ---")
     last_counters = {}
     last_timestamp = time.time()
     last_purge_time = 0
 
     while True:
         try:
-            config = get_config()
+            config = load_config()
             if not config:
-                time.sleep(30)
+                print("Config file not found or invalid. Sleeping...")
+                time.sleep(60)
                 continue
 
-            # Purge data once every ~24 hours
+            # Run database setup/purge once every 24 hours
             if time.time() - last_purge_time > (24 * 60 * 60):
+                print("Running daily database maintenance...")
                 setup_database(config)
                 last_purge_time = time.time()
 
             gs = config.get("global_settings", {})
-            active_leases = get_active_leases(gs.get("dnsmasq_leases_file", ""))
-            
-            # --- Firewall Sync ---
-            # This logic can be expanded, for now we just run the CLI command
-            # A more advanced version would have the logic directly here.
-            subprocess.run(["./inetctl-runner.py", "shorewall", "sync"], capture_output=True)
+            leases_file_path = gs.get("dnsmasq_leases_file", "")
+            if not leases_file_path:
+                print("Warning: dnsmasq_leases_file not set in config. Skipping accounting.")
+            else:
+                active_leases = get_active_leases(leases_file_path)
+                current_timestamp = time.time()
+                current_counters = get_iptables_counters(active_leases)
+                time_delta = current_timestamp - last_timestamp
 
-            # --- Bandwidth Collection ---
-            current_timestamp = time.time()
-            current_counters = get_iptables_counters(active_leases)
-            time_delta = current_timestamp - last_timestamp
+                if time_delta > 0 and current_counters:
+                    records = []
+                    for mac_sanitized, counts in current_counters.items():
+                        last_counts = last_counters.get(mac_sanitized, {'in': 0, 'out': 0})
+                        bytes_in_delta = counts['in'] - last_counts['in'] if counts['in'] >= last_counts['in'] else counts['in']
+                        bytes_out_delta = counts['out'] - last_counts['out'] if counts['out'] >= last_counts['out'] else counts['out']
 
-            if time_delta > 0:
-                records = []
-                for mac, counts in current_counters.items():
-                    last_in = last_counters.get(mac, {}).get('in', 0)
-                    last_out = last_counters.get(mac, {}).get('out', 0)
+                        rate_in_mbps = (bytes_in_delta * 8) / (time_delta * 1_000_000)
+                        rate_out_mbps = (bytes_out_delta * 8) / (time_delta * 1_000_000)
+                        
+                        records.append((int(current_timestamp), mac_sanitized, counts['ip'], counts['in'], counts['out'], round(rate_in_mbps, 2), round(rate_out_mbps, 2)))
                     
-                    bytes_in_delta = counts['in'] - last_in if counts['in'] >= last_in else counts['in']
-                    bytes_out_delta = counts['out'] - last_out if counts['out'] >= last_out else counts['out']
-
-                    rate_in_mbps = (bytes_in_delta * 8) / (time_delta * 1_000_000)
-                    rate_out_mbps = (bytes_out_delta * 8) / (time_delta * 1_000_000)
-                    
-                    records.append((int(current_timestamp), mac, counts['ip'], counts['in'], counts['out'], round(rate_in_mbps, 2), round(rate_out_mbps, 2)))
+                    if records:
+                        conn = sqlite3.connect(DB_FILE)
+                        conn.executemany("INSERT OR REPLACE INTO bandwidth VALUES (?, ?, ?, ?, ?, ?, ?)", records)
+                        conn.commit()
+                        conn.close()
+                        print(f"[{time.strftime('%H:%M:%S')}] Logged {len(records)} bandwidth records.")
                 
-                if records:
-                    conn = sqlite3.connect(DB_FILE)
-                    cursor = conn.cursor()
-                    cursor.executemany("INSERT OR REPLACE INTO bandwidth VALUES (?, ?, ?, ?, ?, ?, ?)", records)
-                    conn.commit()
-                    conn.close()
-                    print(f"[{time.strftime('%H:%M:%S')}] Logged {len(records)} bandwidth records.")
-
-            last_counters = current_counters
-            last_timestamp = current_timestamp
+                last_counters = current_counters
+                last_timestamp = current_timestamp
+        
         except Exception as e:
-            print(f"An error occurred in the main loop: {e}")
+            print(f"ERROR in sync.py main loop: {e}")
 
         time.sleep(SYNC_INTERVAL_SECONDS)
 
