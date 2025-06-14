@@ -27,9 +27,7 @@ def save_netplan_config(config: Dict):
     with open(config_file, 'w') as f: yaml.dump(config, f, indent=2)
 
 def get_vlan_subnets() -> Dict[str, str]:
-    """
-    Parses netplan config to get a mapping of VLAN interface names to their subnets.
-    """
+    """Parses netplan config to get a mapping of VLAN interface names to their subnets."""
     netplan_config = load_netplan_config()
     if not netplan_config or 'network' not in netplan_config: return {}
     subnets = {}
@@ -43,6 +41,8 @@ def get_vlan_subnets() -> Dict[str, str]:
                     subnets[device_name] = str(iface.network)
                 except ValueError: continue
     return subnets
+
+# --- All Functions for `inetctl network` Commands Restored ---
 
 def add_netplan_interface(iface_type: str, iface_name: str, settings: Dict):
     """Adds a new interface definition (vlan, bridge) to netplan config."""
@@ -60,10 +60,7 @@ def delete_netplan_interface(iface_type: str, iface_name: str):
         save_netplan_config(config)
 
 def get_all_netplan_interfaces() -> Dict[str, List[str]]:
-    """
-    Gets a list of all configured interfaces grouped by type.
-    This function is now correctly named 'get_all_netplan_interfaces'.
-    """
+    """Gets a list of all configured interfaces grouped by type."""
     config = load_netplan_config()
     if not config or 'network' not in config: return {}
     interfaces = {}
@@ -71,6 +68,17 @@ def get_all_netplan_interfaces() -> Dict[str, List[str]]:
         if isinstance(value, dict) and key != 'version':
             interfaces[key] = list(value.keys())
     return interfaces
+
+def update_netplan_interface(iface_type: str, iface_name: str, key: str, value: str):
+    """Updates a specific key for a given interface in the netplan config."""
+    config = load_netplan_config()
+    if config and config.get('network', {}).get(iface_type, {}).get(iface_name):
+        # This simple update assumes a flat key-value pair under the interface.
+        # For nested keys, a more complex recursive function would be needed.
+        config['network'][iface_type][iface_name][key] = value
+        save_netplan_config(config)
+        return True
+    return False
 
 def apply_netplan_config():
     """Applies the netplan configuration using 'netplan apply'."""
