@@ -33,10 +33,8 @@ def roles_required(*roles):
     def wrapper(fn):
         @wraps(fn)
         def decorated_view(*args, **kwargs):
-            if not current_user.is_authenticated:
-                return login_manager.unauthorized()
-            if current_user.role not in roles:
-                return jsonify({"status": "error", "message": "Permission denied"}), 403
+            if not current_user.is_authenticated: return login_manager.unauthorized()
+            if current_user.role not in roles: return jsonify({"status": "error", "message": "Permission denied"}), 403
             return fn(*args, **kwargs)
         return decorated_view
     return wrapper
@@ -80,30 +78,50 @@ def home():
     known_hosts_map = {h['mac'].lower(): h for h in config.get("known_hosts", [])}
     leases_file = config.get("global_settings", {}).get("dnsmasq_leases_file", "")
     active_leases = get_active_leases(leases_file) if leases_file else []
+    
     ips_to_check = {l['ip'] for l in active_leases} | {h.get("ip_assignment", {}).get("ip") for h in known_hosts_map.values() if h.get("ip_assignment", {}).get("ip")}
     online_status_map = check_multiple_hosts_online(list(filter(None, ips_to_check)))
+    
     active_devices, offline_reservations = [], []
     active_macs = {lease['mac'] for lease in active_leases}
+
     for mac, host_config in known_hosts_map.items():
         is_online = mac in active_macs or online_status_map.get(host_config.get("ip_assignment", {}).get("ip"), False)
         device_data, lease = host_config.copy(), next((l for l in active_leases if l['mac'] == mac), {})
-        device_data.update({"is_online": is_online, "ip": lease.get('ip') or host_config.get("ip_assignment", {}).get("ip"), "hostname": lease.get('hostname') or host_config.get("hostname"), "assignment_status": "Reserved"})
+        device_data.update({
+            "is_online": is_online,
+            "ip": lease.get('ip') or host_config.get("ip_assignment", {}).get("ip"),
+            "hostname": lease.get('hostname') or host_config.get("hostname"),
+            "assignment_status": "Reservation"
+        })
         if is_online:
             active_devices.append(device_data)
         else:
             offline_reservations.append(device_data)
+
     for lease in active_leases:
         if lease['mac'] not in known_hosts_map:
-            active_devices.append({"mac": lease['mac'], "ip": lease['ip'], "hostname": lease['hostname'], "description": f"Dynamic ({lease['hostname']})", "is_online": True, "assignment_status": "Dynamic", "network_access_blocked": False})
-    networks, network_map = config.get("networks", []), {net['id']: net.get('name', net['id']) for net in config.get("networks", [])}
+            active_devices.append({
+                "mac": lease['mac'], "ip": lease['ip'], "hostname": lease['hostname'],
+                "description": lease['hostname'],
+                "is_online": True, "assignment_status": "Dynamic",
+                "network_access_blocked": False
+            })
+    
+    networks = config.get("networks", [])
+    network_map = {net['id']: net.get('name', net['id']) for net in networks}
     active_by_vlan, offline_by_vlan = {}, {}
+    
     all_vlan_ids = set(network_map.keys()) | {'unassigned'}
     for vlan_id in all_vlan_ids:
         active_by_vlan[vlan_id], offline_by_vlan[vlan_id] = [], []
+
     for device in active_devices: active_by_vlan.setdefault(device.get("vlan_id", "unassigned"), []).append(device)
     for device in offline_reservations: offline_by_vlan.setdefault(device.get("vlan_id", "unassigned"), []).append(device)
+    
     all_vlan_keys = sorted([k for k in all_vlan_ids if network_map.get(k) or active_by_vlan[k] or offline_by_vlan[k]], key=lambda x: (x == 'unassigned', x))
     return render_template('home.html', all_vlan_keys=all_vlan_keys, active_by_vlan=active_by_vlan, offline_by_vlan=offline_by_vlan, network_map=network_map)
+
 
 @app.route('/logs')
 @login_required
@@ -169,7 +187,7 @@ def update_host_config(host_mac):
     if not host:
         host = {"mac": host_mac.lower(), "ip_assignment": {"type": "dhcp"}}
         config.setdefault("known_hosts", []).append(host)
-    hostname, schedule_data = data.get('hostname'), data.get('schedule')
+    hostname = data.get('hostname'); schedule_data = data.get('schedule')
     if schedule_data and not schedule_data.get('enabled'): schedule_data = None
     host.update({'description': data.get('description', hostname), 'hostname': hostname, 'vlan_id': data.get('vlan_id'), 'qos_policy': data.get('qos_policy'), 'ip_assignment': {'type': 'static', 'ip': data['ip']} if data.get('ip') else {'type': 'dhcp'}, 'network_access_blocked': data.get('network_access_blocked', False), 'schedule': schedule_data})
     config['known_hosts'] = sorted(config['known_hosts'], key=lambda h: h.get('hostname', 'z').lower())
