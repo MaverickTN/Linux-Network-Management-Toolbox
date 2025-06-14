@@ -15,11 +15,9 @@ from inetctl.core.logger import log_event
 from inetctl.core.job_queue import add_job, get_job_status
 
 DB_FILE = Path("./inetctl_stats.db")
-
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
 
-# --- Flask-Login Configuration ---
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
@@ -30,7 +28,6 @@ login_manager.login_message_category = "error"
 def load_user(user_id):
     return get_user_by_id(int(user_id))
 
-# --- Role-based Access Decorator ---
 def roles_required(*roles):
     def wrapper(fn):
         @wraps(fn)
@@ -52,7 +49,6 @@ def get_db_connection():
 def format_datetime_filter(ts):
     return datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M:%S") if ts else "N/A"
 
-# --- Authentication Routes ---
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if current_user.is_authenticated:
@@ -75,7 +71,6 @@ def logout():
     logout_user()
     return redirect(url_for("login"))
 
-# --- Main Application Routes ---
 @app.route("/")
 @login_required
 def home():
@@ -84,40 +79,60 @@ def home():
     leases_file = config.get("global_settings", {}).get("dnsmasq_leases_file", "")
     active_leases = get_active_leases(leases_file) if leases_file else []
     
-    # Check online status using a comprehensive list of IPs
     ips_to_check = {l['ip'] for l in active_leases}
     ips_to_check.update({h.get("ip_assignment",{}).get("ip") for h in known_hosts_map.values() if h.get("ip_assignment",{}).get("ip")})
-    online_status_map = check_multiple_hosts_online(list(ips_to_check))
+    online_status_map = check_multiple_hosts_online(list(filter(None, ips_to_check)))
     
     active_devices, offline_reservations = [], []
     active_macs = {lease['mac'] for lease in active_leases}
 
     for mac, host_config in known_hosts_map.items():
-        is_online = mac in active_macs or online_status_map.get(host_config.get("ip_assignment",{}).get("ip"), False)
+        is_online = mac in active_macs or online_status_map.get(host_config.get("ip_assignment", {}).get("ip"), False)
+        
+        device_data = host_config.copy()
+        lease = next((l for l in active_leases if l['mac'] == mac), {})
+        
+        device_data.update({
+            "is_online": is_online,
+            "ip": lease.get('ip') or host_config.get("ip_assignment",{}).get("ip"),
+            "hostname": lease.get('hostname') or host_config.get("hostname"),
+            "assignment_status": "Reserved"
+        })
+        
         if is_online:
-            lease = next((l for l in active_leases if l['mac'] == mac), {})
-            device_data = host_config.copy()
-            device_data.update({ "is_online": True, "ip": lease.get('ip', host_config.get("ip_assignment",{}).get("ip")), "hostname": lease.get('hostname', host_config.get("hostname")), "assignment_status": "Reserved" })
             active_devices.append(device_data)
         else:
-            device_data = host_config.copy()
-            device_data.update({"is_online": False, "assignment_status": "Reserved"})
             offline_reservations.append(device_data)
 
     for lease in active_leases:
         if lease['mac'] not in known_hosts_map:
-            active_devices.append({ "mac": lease['mac'], "ip": lease['ip'], "hostname": lease['hostname'], "description": f"Dynamic ({lease['hostname']})", "is_online": True, "assignment_status": "Dynamic", "network_access_blocked": False })
+            active_devices.append({
+                "mac": lease['mac'], "ip": lease['ip'], "hostname": lease['hostname'],
+                "description": f"Dynamic ({lease['hostname']})",
+                "is_online": True, "assignment_status": "Dynamic",
+                "network_access_blocked": False
+            })
     
     networks = config.get("networks", [])
     network_map = {net['id']: net.get('name', net['id']) for net in networks}
-    active_by_vlan, offline_by_vlan = {net['id']: [] for net in networks}, {net['id']: [] for net in networks}
-    active_by_vlan['unassigned'], offline_by_vlan['unassigned'] = [],[]
-
-    for device in active_devices: active_by_vlan.setdefault(device.get("vlan_id", "unassigned"), []).append(device)
-    for device in offline_reservations: offline_by_vlan.setdefault(device.get("vlan_id", "unassigned"), []).append(device)
-
-    all_vlan_keys = sorted(network_map.keys(), key=lambda x: (x != 'unassigned', x))
+    active_by_vlan, offline_by_vlan = {}, {}
     
+    # Initialize all possible VLAN buckets first
+    all_vlan_ids = set(network_map.keys()) | {'unassigned'}
+    for vlan_id in all_vlan_ids:
+        active_by_vlan[vlan_id] = []
+        offline_by_vlan[vlan_id] = []
+
+    for device in active_devices:
+        active_by_vlan.setdefault(device.get("vlan_id", "unassigned"), []).append(device)
+    for device in offline_reservations:
+        offline_by_vlan.setdefault(device.get("vlan_id", "unassigned"), []).append(device)
+    
+    all_vlan_keys = sorted([k for k in all_vlan_ids if active_by_vlan[k] or offline_by_vlan[k]])
+    if 'unassigned' in all_vlan_keys:
+        all_vlan_keys.remove('unassigned')
+        all_vlan_keys.append('unassigned')
+
     return render_template('home.html', all_vlan_keys=all_vlan_keys, active_by_vlan=active_by_vlan, offline_by_vlan=offline_by_vlan, network_map=network_map)
 
 
@@ -142,8 +157,6 @@ def logs():
     log_entries, all_users = conn.execute(query, params).fetchall(), get_all_users()
     conn.close()
     return render_template('logs.html', logs=log_entries, all_users=all_users, selected_users=selected_users, start_time_val=start_time_str, end_time_val=end_time_str)
-
-# --- API Routes for Async UI ---
 
 @app.route('/api/submit_job', methods=['POST'])
 @login_required
