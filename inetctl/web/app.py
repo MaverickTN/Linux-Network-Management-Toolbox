@@ -23,8 +23,7 @@ app.secret_key = os.urandom(24)
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
-login_manager.login_message = "You must be logged in to access this page."
-login_manager.login_message_category = "error"
+login_manager.login_message, login_manager.login_message_category = "You must be logged in to access this page.", "error"
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -35,10 +34,8 @@ def roles_required(*roles):
     def wrapper(fn):
         @wraps(fn)
         def decorated_view(*args, **kwargs):
-            if not current_user.is_authenticated:
-                return login_manager.unauthorized()
-            if current_user.role not in roles:
-                return jsonify({"status": "error", "message": "Permission denied"}), 403
+            if not current_user.is_authenticated: return login_manager.unauthorized()
+            if current_user.role not in roles: return jsonify({"status": "error", "message": "Permission denied"}), 403
             return fn(*args, **kwargs)
         return decorated_view
     return wrapper
@@ -55,8 +52,7 @@ def format_datetime_filter(ts):
 # --- Authentication Routes ---
 @app.route("/login", methods=["GET", "POST"])
 def login():
-    if current_user.is_authenticated:
-        return redirect(url_for("home"))
+    if current_user.is_authenticated: return redirect(url_for("home"))
     if request.method == "POST":
         username, password = request.form["username"], request.form["password"]
         user_obj, password_hash = get_user_by_name(username)
@@ -81,7 +77,7 @@ def logout():
 def home():
     config = load_config()
     known_hosts_map = {h['mac'].lower(): h for h in config.get("known_hosts", [])}
-    leases_file = config.get("global_settings", {}).get("dnsmasq_leases_file", "")
+    leases_file = config.get("system_paths", {}).get("dnsmasq_leases_file", "")
     active_leases = get_active_leases(leases_file) if leases_file else []
     ips_to_check = {l['ip'] for l in active_leases} | {h.get("ip_assignment", {}).get("ip") for h in known_hosts_map.values() if h.get("ip_assignment", {}).get("ip")}
     online_status_map = check_multiple_hosts_online(list(filter(None, ips_to_check)))
@@ -104,9 +100,8 @@ def home():
     for vlan_id in all_vlan_ids: active_by_vlan[vlan_id], offline_by_vlan[vlan_id] = [], []
     for device in active_devices: active_by_vlan.setdefault(device.get("vlan_id", "unassigned"), []).append(device)
     for device in offline_reservations: offline_by_vlan.setdefault(device.get("vlan_id", "unassigned"), []).append(device)
-    all_vlan_keys = sorted([k for k in all_vlan_ids if network_map.get(k) or active_by_vlan[k] or offline_by_vlan[k]], key=lambda x: (x == 'unassigned', x))
+    all_vlan_keys = sorted([k for k in all_vlan_ids if network_map.get(k) or active_by_vlan.get(k) or offline_by_vlan.get(k)], key=lambda x: (x == 'unassigned', x))
     return render_template('home.html', all_vlan_keys=all_vlan_keys, active_by_vlan=active_by_vlan, offline_by_vlan=offline_by_vlan, network_map=network_map)
-
 
 @app.route('/network')
 @login_required
@@ -135,13 +130,14 @@ def logs():
     conn.close()
     return render_template('logs.html', logs=log_entries, all_users=all_users, selected_users=selected_users, start_time_val=start_time_str, end_time_val=end_time_str)
 
+# --- API Routes ---
 @app.route('/api/submit_job', methods=['POST'])
 @login_required
 def submit_job():
     data = request.get_json(); job_type = data.get("job_type"); payload = data.get("payload", {})
-    if job_type in ["netplan:apply", "netplan:add_interface", "netplan:delete_interface"] and current_user.role != 'admin':
+    if job_type in ["netplan:apply", "netplan:add_interface", "netplan:delete_interface", "api:vlan_toggle_access"] and current_user.role != 'admin':
          return jsonify({"status": "error", "message": "Permission denied."}), 403
-    if job_type in ["shorewall:sync", "api:vlan_toggle_access"] and current_user.role not in ['admin', 'operator']:
+    if job_type in ["shorewall:sync"] and current_user.role not in ['admin', 'operator']:
         return jsonify({"status": "error", "message": "Permission denied."}), 403
     job_id = add_job(job_type, payload, current_user.username)
     log_event("INFO", f"api:{job_type}", f"Job {job_id} created", username=current_user.username)
@@ -159,12 +155,12 @@ def check_job_status(job_id):
 @app.route('/api/host_details/<host_mac>')
 @login_required
 def get_host_details(host_mac):
-    config = load_config(); leases_file = config.get("global_settings", {}).get("dnsmasq_leases_file", "")
+    config = load_config(); leases_file = config.get("system_paths", {}).get("dnsmasq_leases_file", "")
     host_config = get_host_by_mac(config, host_mac)[0] or {"mac": host_mac}
     lease_info = next((l for l in get_active_leases(leases_file) if l['mac'] == host_mac), None)
     if lease_info: host_config['ip'], host_config['hostname'] = lease_info['ip'], host_config.get('hostname') or lease_info.get('hostname')
     return jsonify(host_config)
-
+    
 @app.route('/api/system_config')
 @login_required
 def get_system_config():
@@ -189,6 +185,20 @@ def update_host_config(host_mac):
     if data.get('trigger_sync'): add_job("shorewall:sync", {}, current_user.username); log_event("INFO", "api:host:update", "Host config change triggered firewall sync.", username=current_user.username)
     return jsonify({"status": "ok", "message": "Host configuration saved."})
 
+@app.route('/api/vlan_toggle_access', methods=['POST'])
+@login_required
+@roles_required('admin')
+def toggle_vlan_access():
+    data, vlan_id, should_block = request.get_json(), request.get_json().get('vlan_id'), request.get_json().get('block', True)
+    config = load_config()
+    for host in config.get("known_hosts", []):
+        if host.get("vlan_id") == vlan_id: host['network_access_blocked'] = should_block
+    save_config(config)
+    vlan_name = next((n.get('name',vlan_id) for n in config.get("networks",[]) if n.get('id')==vlan_id), vlan_id)
+    log_event("WARNING" if should_block else "INFO", "api:vlan:toggle", f"Set network_access_blocked={should_block} for all hosts in VLAN '{vlan_name}'.", username=current_user.username)
+    add_job("shorewall:sync", {}, current_user.username)
+    return jsonify({"status": "ok", "message": f"Queued job to {'block' if should_block else 'unblock'} VLAN."})
+
 @app.route('/data/bandwidth/<host_id>')
 @login_required
 def get_bandwidth_data(host_id):
@@ -196,3 +206,29 @@ def get_bandwidth_data(host_id):
     readings = conn.execute('SELECT timestamp, rate_in, rate_out FROM bandwidth WHERE host_id = ? AND timestamp > ? ORDER BY timestamp ASC', (host_id, int(time.time()) - 300)).fetchall()
     conn.close()
     return jsonify({'labels': [datetime.fromtimestamp(r['timestamp']).strftime('%H:%M:%S') for r in readings], 'datasets': [{'label': 'Download (Mbps)', 'data': [r['rate_in'] for r in readings]}, {'label': 'Upload (Mbps)', 'data': [r['rate_out'] for r in readings]}]})
+
+@app.route('/api/online_status')
+@login_required
+def get_live_online_status():
+    """Provides a JSON blob of the online status of all devices."""
+    config = load_config()
+    known_hosts_map = {h['mac'].lower(): h for h in config.get("known_hosts", [])}
+    leases_file = config.get("system_paths", {}).get("dnsmasq_leases_file", "")
+    active_leases = get_active_leases(leases_file) if leases_file else []
+    
+    ips_to_check = {l['ip'] for l in active_leases}
+    ips_to_check.update({h.get("ip_assignment", {}).get("ip") for h in known_hosts_map.values() if h.get("ip_assignment", {}).get("ip")})
+    online_status_map = check_multiple_hosts_online(list(filter(None, ips_to_check)))
+    
+    final_mac_status = {}
+    ip_to_mac = {l['ip']: l['mac'] for l in active_leases}
+    for ip, status in online_status_map.items():
+        if ip in ip_to_mac:
+            final_mac_status[ip_to_mac[ip]] = status
+
+    for mac, host_config in known_hosts_map.items():
+        static_ip = host_config.get("ip_assignment", {}).get("ip")
+        if static_ip and static_ip in online_status_map:
+             final_mac_status[mac] = online_status_map[static_ip]
+             
+    return jsonify(final_mac_status)
