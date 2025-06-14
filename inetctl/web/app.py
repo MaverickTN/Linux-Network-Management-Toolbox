@@ -8,7 +8,6 @@ from pathlib import Path
 from datetime import datetime
 from functools import wraps
 
-# All required local imports
 from inetctl.core.auth import User, get_user_by_id, get_user_by_name, verify_password, get_all_users
 from inetctl.core.config_loader import load_config, save_config
 from inetctl.core.utils import get_host_by_mac, check_multiple_hosts_online, get_active_leases
@@ -16,6 +15,7 @@ from inetctl.core.logger import log_event
 from inetctl.core.job_queue import add_job, get_job_status
 
 DB_FILE = Path("./inetctl_stats.db")
+
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
 
@@ -80,47 +80,46 @@ def logout():
 @login_required
 def home():
     config = load_config()
-    all_hosts_config = {h['mac']: h for h in config.get("known_hosts", [])}
+    known_hosts_map = {h['mac']: h for h in config.get("known_hosts", [])}
     leases_file = config.get("global_settings", {}).get("dnsmasq_leases_file", "")
     active_leases = get_active_leases(leases_file) if leases_file else []
+    
+    # Check online status using a comprehensive list of IPs
+    ips_to_check = {l['ip'] for l in active_leases}
+    ips_to_check.update({h.get("ip_assignment",{}).get("ip") for h in known_hosts_map.values() if h.get("ip_assignment",{}).get("ip")})
+    online_status_map = check_multiple_hosts_online(list(ips_to_check))
+    
     active_devices, offline_reservations = [], []
-    macs_with_leases = {lease['mac'] for lease in active_leases}
+    active_macs = {lease['mac'] for lease in active_leases}
+
+    for mac, host_config in known_hosts_map.items():
+        is_online = mac in active_macs or online_status_map.get(host_config.get("ip_assignment",{}).get("ip"), False)
+        if is_online:
+            lease = next((l for l in active_leases if l['mac'] == mac), {})
+            device_data = host_config.copy()
+            device_data.update({ "is_online": True, "ip": lease.get('ip', host_config.get("ip_assignment",{}).get("ip")), "hostname": lease.get('hostname', host_config.get("hostname")), "assignment_status": "Reserved" })
+            active_devices.append(device_data)
+        else:
+            device_data = host_config.copy()
+            device_data.update({"is_online": False, "assignment_status": "Reserved"})
+            offline_reservations.append(device_data)
 
     for lease in active_leases:
-        # THIS IS THE CORRECTED LOGIC THAT FIXES THE UnboundLocalError
-        mac = lease['mac']
-        device = all_hosts_config.get(mac, {})
-        
-        active_devices.append({
-            "mac": mac, "ip": lease['ip'], "hostname": lease['hostname'],
-            "description": device.get("description", lease['hostname']),
-            "vlan_id": device.get("vlan_id"), "qos_policy": device.get("qos_policy"),
-            "schedule": device.get("schedule"), "network_access_blocked": device.get("network_access_blocked", False),
-            "assignment_status": "Reserved" if mac in all_hosts_config else "Dynamic"
-        })
-
-    for mac, device in all_hosts_config.items():
-        if mac not in macs_with_leases:
-            device['assignment_status'] = "Reserved"
-            offline_reservations.append(device)
-
-    networks = config.get("networks", []); network_map = {net['id']: net.get('name', net['id']) for net in networks}
-    active_by_vlan, offline_by_vlan = {net['id']: [] for net in networks}, {net['id']: [] for net in networks}
-    unassigned_active, unassigned_offline = [], []
-
-    for device in active_devices:
-        if (vlan_id := device.get("vlan_id")) in active_by_vlan: active_by_vlan[vlan_id].append(device)
-        else: unassigned_active.append(device)
-    if unassigned_active: active_by_vlan['unassigned'], network_map['unassigned'] = unassigned_active, 'Unassigned'
+        if lease['mac'] not in known_hosts_map:
+            active_devices.append({ "mac": lease['mac'], "ip": lease['ip'], "hostname": lease['hostname'], "description": f"Dynamic ({lease['hostname']})", "is_online": True, "assignment_status": "Dynamic", "network_access_blocked": False })
     
-    for device in offline_reservations:
-        if (vlan_id := device.get("vlan_id")) in offline_by_vlan: offline_by_vlan[vlan_id].append(device)
-        else: unassigned_offline.append(device)
-    if unassigned_offline: offline_by_vlan['unassigned'] = unassigned_offline
+    networks = config.get("networks", [])
+    network_map = {net['id']: net.get('name', net['id']) for net in networks}
+    active_by_vlan, offline_by_vlan = {net['id']: [] for net in networks}, {net['id']: [] for net in networks}
+    active_by_vlan['unassigned'], offline_by_vlan['unassigned'] = [],[]
 
-    all_vlan_keys = sorted(list(set(active_by_vlan.keys()) | set(offline_by_vlan.keys()) | {n['id'] for n in networks}))
+    for device in active_devices: active_by_vlan.setdefault(device.get("vlan_id", "unassigned"), []).append(device)
+    for device in offline_reservations: offline_by_vlan.setdefault(device.get("vlan_id", "unassigned"), []).append(device)
+
+    all_vlan_keys = sorted(network_map.keys(), key=lambda x: (x != 'unassigned', x))
     
     return render_template('home.html', all_vlan_keys=all_vlan_keys, active_by_vlan=active_by_vlan, offline_by_vlan=offline_by_vlan, network_map=network_map)
+
 
 @app.route('/logs')
 @login_required
@@ -150,7 +149,7 @@ def logs():
 @login_required
 def submit_job():
     data, job_type, payload = request.get_json(), request.get_json().get("job_type"), request.get_json().get("payload", {})
-    if job_type in ["shorewall:sync", "access:block", "access:unblock", "api:vlan_toggle_access"] and current_user.role not in ['admin', 'operator']:
+    if job_type in ["shorewall:sync", "api:vlan_toggle_access"] and current_user.role not in ['admin', 'operator']:
         return jsonify({"status": "error", "message": "Permission denied."}), 403
     if job_type in ["netplan:apply", "netplan:add_vlan"] and current_user.role != 'admin':
         return jsonify({"status": "error", "message": "Permission denied."}), 403
@@ -173,8 +172,16 @@ def get_host_details(host_mac):
     config = load_config(); leases_file = config.get("global_settings", {}).get("dnsmasq_leases_file", "")
     host_config = get_host_by_mac(config, host_mac)[0] or {"mac": host_mac}
     lease_info = next((l for l in get_active_leases(leases_file) if l['mac'] == host_mac), None)
-    if lease_info: host_config['ip'], host_config['hostname'] = lease_info['ip'], host_config.get('hostname') or lease_info.get('hostname')
+    if lease_info:
+        host_config['ip'] = lease_info['ip']
+        host_config['hostname'] = host_config.get('hostname') or lease_info.get('hostname')
     return jsonify(host_config)
+    
+@app.route('/api/system_config')
+@login_required
+def get_system_config():
+    config = load_config()
+    return jsonify({ "networks": config.get("networks", []), "qos_policies": config.get("global_settings", {}).get("qos_policies", {}) })
 
 @app.route('/api/update_host_config/<host_mac>', methods=['POST'])
 @login_required
@@ -191,7 +198,9 @@ def update_host_config(host_mac):
     config['known_hosts'] = sorted(config['known_hosts'], key=lambda h: h.get('hostname', 'z').lower())
     save_config(config)
     log_event("INFO", "api:host:update", f"Config saved for '{hostname or host_mac}'", username=current_user.username)
-    if data.get('trigger_sync'): add_job("shorewall:sync", {}, current_user.username); log_event("INFO", "api:host:update", "Host config change triggered firewall sync.", username=current_user.username)
+    if data.get('trigger_sync'):
+        add_job("shorewall:sync", {}, current_user.username)
+        log_event("INFO", "api:host:update", "Host config change triggered firewall sync.", username=current_user.username)
     return jsonify({"status": "ok", "message": "Host configuration saved."})
 
 @app.route('/data/bandwidth/<host_id>')
