@@ -34,13 +34,15 @@ def find_and_run_next_job():
     try:
         payload = json.loads(job_payload_str)
         command = ["./inetctl-runner.py"] 
+        
         if job_type == "shorewall:sync" or job_type == "api:vlan_toggle_access": command.extend(["shorewall", "sync"])
         elif job_type == "netplan:apply": command.extend(["network", "apply"])
-        elif job_type == "netplan:add_vlan":
-            p = payload
-            if not all(k in p for k in ['id', 'name', 'link', 'address']): raise ValueError("Missing required payload fields for add_vlan")
-            command.extend(["network", "add", "vlan", f"vlan{p['id']}", "--link", p['link'], "--address", p['address'], "--name", p['name']])
-        else: raise ValueError(f"Unknown or non-executable job type: {job_type}")
+        elif job_type == "netplan:add_interface":
+            p = payload; command.extend(["network", "add", p['iface_type'], p['iface_name'], '--settings-json', json.dumps(p['settings'])])
+        elif job_type == "netplan:delete_interface":
+            p = payload; command.extend(["network", "delete", p['iface_type'], p['iface_name']])
+        else: raise ValueError(f"Unknown job type: {job_type}")
+            
         result = subprocess.run(command, capture_output=True, text=True, timeout=120)
         final_status, output_message, result_code = ('completed' if result.returncode == 0 else 'failed'), (result.stdout.strip() or result.stderr.strip() or "(No output)"), result.returncode
     except Exception as e:
@@ -63,4 +65,5 @@ def main_loop():
         try: find_and_run_next_job(); time.sleep(POLL_INTERVAL_SECONDS)
         except KeyboardInterrupt: print("\nShutting down gracefully."); break
         except Exception as e: print(f"Unexpected error in main loop: {e}"); time.sleep(30)
-if __name__ == "__main__": main_loop()
+if __name__ == "__main__":
+    main_loop()

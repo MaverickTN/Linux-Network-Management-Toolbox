@@ -1,243 +1,151 @@
+import typer
 import json
 from pathlib import Path
-from typing import Dict, Any
 
-import typer
-
-# Import the core logic functions from our new modules
 from inetctl.core.config_loader import (
-    LOADED_CONFIG_PATH,
-    find_config_file,
     load_config,
     save_config,
+    find_config_file,
+    CONFIG_SEARCH_PATHS,
 )
 
-# Define a new Typer application for the 'config' subcommand
 app = typer.Typer(
-    name="config", help="Manage and view inetctl configuration.", no_args_is_help=True
+    name="config", 
+    help="Manage the Linux Network Management Toolbox configuration file.", 
+    no_args_is_help=True
 )
 
+# --- NEW: A Comprehensive Default Configuration ---
+DEFAULT_CONFIG = {
+    "global_settings": {
+        "dnsmasq_leases_file": "/var/lib/misc/dnsmasq.leases",
+        "accounting_interface": "br0", # Important for iptaccount
+        "wan_network_id": "wan",
+        "database_retention_days": 14,
+        # Section for defining the main internet connection's speed
+        "wan_bandwidth": {
+            "upload_mbps": 20,
+            "download_mbps": 250
+        }
+    },
+    # The networks list will be auto-populated from Netplan by the app
+    "networks": [],
+    # known_hosts is for device-specific reservations and settings
+    "known_hosts": [],
+    # Placeholders for future feature integration
+    "security": {
+        "tls_cert_path": None,
+        "tls_key_path": None
+    },
+    "web_portal": {
+        "host": "0.0.0.0",
+        "port": 8080,
+        "debug": False
+    },
+    # Comprehensive QoS policies
+    "qos_policies": {
+        "bulk": { "description": "Low Priority (Torrents, Backups)", "priority": 5, "fw_mark": 5, "guaranteed_mbit": 1, "limit_mbit": 100 },
+        "normal": { "description": "Normal Priority (General Browsing)", "priority": 3, "fw_mark": 3, "guaranteed_mbit": 5, "limit_mbit": 200 },
+        "priority": { "description": "High Priority (VoIP, Gaming)", "priority": 1, "fw_mark": 1, "guaranteed_mbit": 10, "limit_mbit": 250 }
+    },
+    # Placeholder for future Pi-hole integration
+    "pihole": {
+        "enabled": False,
+        "host_ip": "192.168.1.2",
+        "api_key": "PASTE_YOUR_PIHOLE_API_KEY_HERE"
+    },
+    # Placeholder for future WireGuard VPN server integration
+    "wireguard": {
+        "enabled": False,
+        "server": {
+            "interface_name": "wg0",
+            "private_key": "PASTE_SERVER_PRIVATE_KEY",
+            "address": "10.100.100.1/24",
+            "listen_port": 51820
+        },
+        # This list will hold "remote hosts" (client peers)
+        "peers": [
+            {
+                "name": "my_phone",
+                "public_key": "PASTE_PHONE_PUBLIC_KEY",
+                "allowed_ips": "10.100.100.2/32"
+            },
+            {
+                "name": "my_laptop",
+                "public_key": "PASTE_LAPTOP_PUBLIC_KEY",
+                "allowed_ips": "10.100.100.3/32"
+            }
+        ]
+    }
+}
 
-@app.command("init")
-def config_init(
+
+@app.command(name="init")
+def init_config(
     force: bool = typer.Option(
-        False, "--force", help="Force overwrite of existing configuration file."
+        False, 
+        "--force", "-f", 
+        help="Overwrite an existing config file."
     )
 ):
-    """Creates an initial 'server_config.json' file interactively."""
-    typer.echo(typer.style("--- Initial Configuration Setup ---", bold=True))
+    """
+    Creates a new, comprehensive server_config.json file interactively.
+    """
+    config_path = Path(CONFIG_SEARCH_PATHS[-1])
+    
+    if config_path.exists() and not force:
+        typer.echo(f"Configuration file already exists at {config_path}")
+        typer.echo("Use --force to overwrite.")
+        raise typer.Exit(code=1)
 
-    existing_config = find_config_file()
-    save_path = None
+    typer.echo("Initializing new Linux Network Management Toolbox configuration...")
+    
+    new_config = DEFAULT_CONFIG.copy()
 
-    if existing_config and not force:
-        typer.echo(
-            typer.style(
-                f"Warning: Configuration file already exists at {existing_config}",
-                fg=typer.colors.YELLOW,
-            )
-        )
-        if not typer.confirm("Do you want to overwrite it?"):
-            raise typer.Abort()
-        save_path = existing_config
+    listen_ip = typer.prompt("Enter the IP for the web portal to listen on", default="0.0.0.0")
+    listen_port = typer.prompt("Enter the port for the web portal", default=8080, type=int)
+    
+    new_config["web_portal"]["host"] = listen_ip
+    new_config["web_portal"]["port"] = listen_port
 
-    if not save_path:
-        typer.echo("Choose where to save the new configuration file:")
-        typer.echo("1: In the current directory (./server_config.json)")
-        typer.echo(f"2: In the user config directory (~/.config/inetctl/server_config.json)")
-        choice = typer.prompt("Enter choice (1 or 2)", type=int, default=1)
-        if choice == 1:
-            save_path = Path("./server_config.json")
-        elif choice == 2:
-            save_path = Path.home() / ".config" / "inetctl" / "server_config.json"
-        else:
-            typer.echo(typer.style("Invalid choice.", fg=typer.colors.RED))
-            raise typer.Exit(1)
-
-    typer.echo(typer.style(f"\nGathering essential settings for {save_path}", bold=True))
-
-    default_config = {
-        "global_settings": {
-            "wan_interface": typer.prompt(
-                "Enter your primary WAN interface name", default="eth0"
-            ),
-            "primary_host_lan_interface_base": typer.prompt(
-                "Enter your primary LAN interface name (base for VLANs)", default="eth1"
-            ),
-            "dnsmasq_config_dir": typer.prompt(
-                "Enter path to Dnsmasq config directory", default="/etc/dnsmasq.d"
-            ),
-            "dnsmasq_leases_file": typer.prompt(
-                "Enter path to Dnsmasq leases file",
-                default="/var/lib/misc/dnsmasq.leases",
-            ),
-            "netplan_config_dir": typer.prompt(
-                "Enter path to Netplan config directory", default="/etc/netplan"
-            ),
-            "shorewall_snat_file_path": typer.prompt(
-                "Enter path to Shorewall 'snat' file", default="/etc/shorewall/snat"
-            ),
-            "default_lan_upload_speed": "100mbit",
-            "default_lan_download_speed": "1000mbit",
-        },
-        "web_portal": {"host": "0.0.0.0", "port": 8080, "debug": False},
-        "networks": [],
-        "hosts_dhcp_reservations": [],
-        "remote_hosts": [],
-        "wireguard_hub_peers": [],
-        "traffic_control_policies": [
-            {
-                "id": "bulk-downloads",
-                "description": "For devices that can use lots of bandwidth but are not priority.",
-                "rate_down": "500mbit",
-                "ceil_down": "800mbit",
-                "rate_up": "10mbit",
-                "ceil_up": "20mbit",
-            },
-            {
-                "id": "priority-gaming",
-                "description": "Low latency and high priority for gaming consoles.",
-                "rate_down": "800mbit",
-                "ceil_down": "1000mbit",
-                "rate_up": "50mbit",
-                "ceil_up": "80mbit",
-                "priority": 1,
-            },
-            {
-                "id": "iot-limited",
-                "description": "Very limited bandwidth for IoT devices.",
-                "rate_down": "5mbit",
-                "ceil_down": "10mbit",
-                "rate_up": "1mbit",
-                "ceil_up": "2mbit",
-                "priority": 7,
-            },
-        ],
-        "access_control_schedules": [],
-    }
-
-    if save_config(default_config, path_override=save_path):
-        typer.echo(
-            typer.style(
-                "\nInitial configuration created successfully.",
-                fg=typer.colors.GREEN,
-                bold=True,
-            )
-        )
-        typer.echo("You can now add networks and hosts to this file.")
-
-
-@app.command("validate")
-def config_validate():
-    """Validates the inetctl configuration file (existence, JSON validity, key sections)."""
     try:
-        config = load_config(force_reload=True)
-
-        required_top_level = [
-            "global_settings",
-            "networks",
-            "hosts_dhcp_reservations",
-            "traffic_control_policies",
-        ]
-        missing_sections = [s for s in required_top_level if s not in config]
-        if missing_sections:
-            typer.echo(
-                typer.style(
-                    f"Warning: Config missing essential sections: {', '.join(missing_sections)}",
-                    fg=typer.colors.YELLOW,
-                )
-            )
-
-        gs = config.get("global_settings", {})
-        essential_global_keys = [
-            "dnsmasq_config_dir",
-            "primary_host_lan_interface_base",
-            "wan_interface",
-            "netplan_config_dir",
-            "dnsmasq_leases_file",
-        ]
-        missing_global_keys = [k for k in essential_global_keys if k not in gs]
-        if missing_global_keys:
-            for k in missing_global_keys:
-                typer.echo(
-                    typer.style(
-                        f"Warning: Global setting '{k}' not found.",
-                        fg=typer.colors.YELLOW,
-                    )
-                )
-
+        config_path.parent.mkdir(parents=True, exist_ok=True)
+        save_config(new_config, config_path=config_path)
         typer.echo(
-            typer.style(
-                f"Configuration file at {LOADED_CONFIG_PATH} loaded and is valid JSON.",
-                fg=typer.colors.GREEN,
-            )
+            typer.style(f"\nSuccessfully created comprehensive configuration at {config_path}", fg=typer.colors.GREEN)
         )
-        if not missing_sections and not missing_global_keys:
-            typer.echo(
-                typer.style("Basic structural validation passed.", fg=typer.colors.GREEN)
-            )
-
-    except typer.Exit:
-        if LOADED_CONFIG_PATH:
-            typer.echo(
-                typer.style(
-                    f"Validation failed for config at {LOADED_CONFIG_PATH}.",
-                    fg=typer.colors.RED,
-                )
-            )
-        else:
-            typer.echo(
-                typer.style(
-                    "Validation failed: No configuration file could be loaded.",
-                    fg=typer.colors.RED,
-                )
-            )
+        typer.echo("Please review the new file to add your WireGuard keys and other site-specific details.")
+        typer.echo(f"Web portal will listen on: http://{listen_ip}:{listen_port}")
+    except Exception as e:
+        typer.echo(f"Failed to create configuration file: {e}", err=True)
+        raise typer.Exit(code=1)
 
 
-@app.command("show")
-def config_show(
-    raw: bool = typer.Option(False, "--raw", help="Display the raw JSON configuration.")
-):
-    """Displays the loaded inetctl configuration (summary or raw JSON)."""
-    config = load_config()
-    if raw:
-        typer.echo(json.dumps(config, indent=2))
+@app.command(name="path")
+def show_config_path():
+    """
+    Shows the path to the currently used configuration file.
+    """
+    path = find_config_file()
+    if path:
+        typer.echo(path)
     else:
-        typer.echo(typer.style("Loaded Configuration Summary:", bold=True))
-        if LOADED_CONFIG_PATH:
-            typer.echo(f"  Config file path: {LOADED_CONFIG_PATH}")
-        else:
-            typer.echo(
-                typer.style(
-                    "  Warning: Config path not determined.", fg=typer.colors.YELLOW
-                )
-            )
+        typer.echo("No configuration file found.", err=True)
+        raise typer.Exit(code=1)
 
-        sections_to_summarize = {
-            "Global Settings": config.get("global_settings"),
-            "Web Portal": config.get("web_portal"),
-            "Remote Hosts": config.get("remote_hosts"),
-            "Networks (VLANs)": config.get("networks"),
-            "DHCP Reservations": config.get("hosts_dhcp_reservations"),
-            "WireGuard Hub Peers": config.get("wireguard_hub_peers"),
-            "Traffic Control Policies": config.get("traffic_control_policies"),
-            "Access Control Schedules": config.get("access_control_schedules"),
-        }
 
-        for name, content in sections_to_summarize.items():
-            if content is None:
-                typer.echo(
-                    typer.style(
-                        f"\n{name}: (Section not defined)", fg=typer.colors.YELLOW
-                    )
-                )
-                continue
-
-            count_info = f" ({len(content)} entries)" if isinstance(content, list) else ""
-            typer.echo(typer.style(f"\n{name}:{count_info}", fg=typer.colors.BLUE))
-
-            if not content:
-                typer.echo("    (No entries)")
-            elif isinstance(content, dict):
-                for key, value in content.items():
-                    typer.echo(f"  - {key}: {value}")
+@app.command(name="get")
+def get_config_value(
+    key: str = typer.Argument(..., help="The top-level key to retrieve (e.g., 'global_settings').")
+):
+    """
+    Prints a specific top-level section of the config as JSON.
+    """
+    config = load_config()
+    value = config.get(key)
+    
+    if value is not None:
+        typer.echo(json.dumps(value, indent=2))
+    else:
+        typer.echo(f"Key '{key}' not found in configuration.", err=True)
+        raise typer.Exit(code=1)

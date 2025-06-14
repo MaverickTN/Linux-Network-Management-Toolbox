@@ -1,0 +1,173 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Network Configuration - Linux Network Management Toolbox</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css" />
+    <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
+    <style>
+        nav {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .card {
+            margin-top: 2rem;
+        }
+
+            .card header {
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+            }
+
+        td a {
+            margin: 0 0.5rem;
+        }
+
+        .action-link {
+            cursor: pointer;
+            color: var(--pico-primary);
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <main class="container">
+        <!-- Main Navigation Bar -->
+        <nav>
+            <ul><li><a href="{{ url_for('home') }}" class="secondary">← Back to Dashboard</a></li></ul>
+            <ul>
+                <li><a href="{{ url_for('logout') }}" role="button">Logout ({{ current_user.username }})</a></li>
+            </ul>
+        </nav>
+
+        <hgroup>
+            <h1>Network Configuration</h1>
+            <p>Manage system network interfaces (VLANs, Bridges, etc.) via Netplan.</p>
+        </hgroup>
+
+        <button class="contrast" onclick="applyNetplan()">Apply ALL Pending Netplan Changes</button>
+        <hr>
+
+        <!-- VLAN Management Card -->
+        <article class="card">
+            <header>
+                <strong>VLANs</strong>
+                <button onclick="document.getElementById('add-vlan-modal').showModal()">Add New VLAN</button>
+            </header>
+            <table>
+                <thead>
+                    <tr><th>Name</th><th>ID</th><th>Parent Link</th><th>Address</th><th>Actions</th></tr>
+                </thead>
+                <tbody>
+                    {% for iface_name, details in (netplan_config.network.vlans or {}).items() %}
+                    <tr>
+                        <td><strong>{{ iface_name }}</strong></td>
+                        <td>{{ details.id }}</td>
+                        <td>{{ details.link }}</td>
+                        <td>{{ (details.addresses or ['-'])[0] }}</td>
+                        <td>
+                            <a href="#" class="action-link" onclick="handleDeleteVlan('{{ iface_name }}')">Delete</a>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="5">No VLANs are currently configured.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </article>
+
+    </main>
+
+    <!-- Modal for adding a new VLAN -->
+    <dialog id="add-vlan-modal">
+        <article>
+            <header><a href="#close" aria-label="Close" class="close" onclick="this.closest('dialog').close()"></a><strong>Add New VLAN</strong></header>
+            <form id="add-vlan-form" onsubmit="handleAddVlan(event)">
+                <label>VLAN ID (2-4094)<input type="number" name="id" min="2" max="4094" required></label>
+                <label>Parent Interface (e.g., eth1, br0)<input type="text" name="link" required></label>
+                <label>Address & Subnet (e.g., 192.168.20.1/24)<input type="text" name="address" required></label>
+                <footer>
+                    <button type="button" class="secondary" onclick="this.closest('dialog').close()">Cancel</button>
+                    <button type="submit">Create VLAN</button>
+                </footer>
+            </form>
+        </article>
+    </dialog>
+
+    <script>
+        function showToast(message, type = 'info') {
+            const colors = { success: "#00b09b", error: "#ff5f6d", info: "#2b82cf" };
+            Toastify({ text: message, duration: 5000, gravity: "top", position: "right", stopOnFocus: true, style: { background: `linear-gradient(to right, ${colors[type]}, #61D5B4)` } }).showToast();
+        }
+
+        async function queueJob(jobType, payload = {}) {
+            showToast(`Queueing job: ${jobType}...`, 'info');
+            try {
+                const response = await fetch('/api/submit_job', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ job_type: jobType, payload: payload }) });
+                const data = await response.json();
+                if (response.ok) {
+                    showToast(`Job #${data.job_id} queued! Page will refresh on completion.`, 'success');
+                    pollJobStatus(data.job_id);
+                } else {
+                    showToast(`Error: ${data.message || 'Unknown error'}`, 'error');
+                }
+            } catch (error) {
+                showToast(`Network Error: ${error}`, 'error');
+            }
+        }
+
+        function pollJobStatus(jobId) {
+            const pollInterval = setInterval(async () => {
+                try {
+                    const response = await fetch(`/api/job_status/${jobId}`);
+                    const data = await response.json();
+                    if (data.status === 'completed' || data.status === 'failed') {
+                        clearInterval(pollInterval);
+                        const message = `Job #${jobId} (${data.job_type}) finished: ${data.status.toUpperCase()}`;
+                        showToast(message, data.status === 'completed' ? 'success' : 'error');
+                        // Always reload the page after a network action to see changes
+                        setTimeout(() => window.location.reload(), 1500);
+                    }
+                } catch (error) {
+                    clearInterval(pollInterval);
+                    showToast(`Error checking job status: ${error}`, 'error');
+                }
+            }, 3000);
+        }
+
+        function applyNetplan() {
+            if (confirm("This will apply pending system network changes and may briefly disrupt connectivity. Proceed?")) {
+                queueJob('netplan:apply', {});
+            }
+        }
+
+        async function handleAddVlan(e) {
+            e.preventDefault();
+            const form = e.target;
+            const vlan_id = form.querySelector("[name=id]").value;
+            const payload = {
+                iface_name: `vlan${vlan_id}`,
+                iface_type: 'vlans',
+                settings: {
+                    id: parseInt(vlan_id),
+                    link: form.querySelector("[name=link]").value,
+                    addresses: [form.querySelector("[name=address]").value]
+                }
+            };
+            document.getElementById('add-vlan-modal').close();
+            queueJob('netplan:add_interface', payload);
+        }
+
+        function handleDeleteVlan(iface_name) {
+             if (confirm(`Are you sure you want to delete the interface '${iface_name}'? This change will be applied immediately.`)) {
+                queueJob('netplan:delete_interface', { iface_name: iface_name, iface_type: 'vlans' });
+            }
+        }
+    </script>
+</body>
+</html>
