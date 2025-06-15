@@ -2,6 +2,7 @@ import sqlite3
 import time
 import os
 import json
+import ipaddress
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from pathlib import Path
@@ -23,59 +24,41 @@ app.secret_key = os.urandom(24)
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
-login_manager.login_message = "You must be logged in to access this page."
-login_manager.login_message_category = "error"
+login_manager.login_message, login_manager.login_message_category = "You must be logged in.", "error"
 
 @login_manager.user_loader
 def load_user(user_id):
     return get_user_by_id(int(user_id))
 
-# --- Role-based Access Decorator ---
 def roles_required(*roles):
     def wrapper(fn):
         @wraps(fn)
         def decorated_view(*args, **kwargs):
-            if not current_user.is_authenticated:
-                return login_manager.unauthorized()
-            if current_user.role not in roles:
-                return jsonify({"status": "error", "message": "Permission denied"}), 403
+            if not current_user.is_authenticated: return login_manager.unauthorized()
+            if current_user.role not in roles: return jsonify({"status": "error", "message": "Permission denied"}), 403
             return fn(*args, **kwargs)
         return decorated_view
     return wrapper
 
-def get_db_connection():
-    conn = sqlite3.connect(DB_FILE)
-    conn.row_factory = sqlite3.Row
-    return conn
-
+def get_db_connection(): conn = sqlite3.connect(DB_FILE); conn.row_factory = sqlite3.Row; return conn
 @app.template_filter("format_datetime")
-def format_datetime_filter(ts):
-    return datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M:%S") if ts else "N/A"
+def format_datetime_filter(ts): return datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M:%S") if ts else "N/A"
 
-# --- Authentication Routes ---
 @app.route("/login", methods=["GET", "POST"])
 def login():
-    if current_user.is_authenticated:
-        return redirect(url_for("home"))
+    if current_user.is_authenticated: return redirect(url_for("home"))
     if request.method == "POST":
         username, password = request.form["username"], request.form["password"]
         user_obj, password_hash = get_user_by_name(username)
         if user_obj and verify_password(password, password_hash):
-            login_user(user_obj)
-            log_event("INFO", "auth:login", f"User '{username}' successfully logged in.", username=username)
-            return redirect(url_for("home"))
-        flash("Invalid username or password.", "error")
-        log_event("WARNING", "auth:login", f"Failed login for '{username}'.", username="anonymous")
+            login_user(user_obj); log_event("INFO", "auth:login", f"User '{username}' successfully logged in.", username=username); return redirect(url_for("home"))
+        flash("Invalid username or password.", "error"); log_event("WARNING", "auth:login", f"Failed login for '{username}'.", username="anonymous")
     return render_template("login.html")
 
 @app.route("/logout")
 @login_required
-def logout():
-    log_event("INFO", "auth:logout", f"User '{current_user.username}' logged out.", username=current_user.username)
-    logout_user()
-    return redirect(url_for("login"))
+def logout(): log_event("INFO", "auth:logout", f"User '{current_user.username}' logged out.", username=current_user.username); logout_user(); return redirect(url_for("login"))
 
-# --- Main Application Routes ---
 @app.route("/")
 @login_required
 def home():
@@ -83,38 +66,50 @@ def home():
     known_hosts_map = {h['mac'].lower(): h for h in config.get("known_hosts", [])}
     leases_file = config.get("system_paths", {}).get("dnsmasq_leases_file", "")
     active_leases = get_active_leases(leases_file) if leases_file else []
+    networks = config.get("networks", [])
     
-    ips_to_check = {l['ip'] for l in active_leases} | {h.get("ip_assignment", {}).get("ip") for h in known_hosts_map.values() if h.get("ip_assignment", {}).get("ip")}
+    subnet_to_vlan_map = {}
+    for net in networks:
+        if cidr := net.get("cidr"):
+            try: subnet_to_vlan_map[ipaddress.ip_network(cidr)] = net['id']
+            except ValueError: continue
+
+    ips_to_check = {l['ip'] for l in active_leases} | {h.get("ip_assignment",{}).get("ip") for h in known_hosts_map.values() if h.get("ip_assignment",{}).get("ip")}
     online_status_map = check_multiple_hosts_online(list(filter(None, ips_to_check)))
     
     active_devices, offline_reservations = [], []
-    active_macs = {lease['mac'] for lease in active_leases}
+    processed_macs = set()
+    for lease in active_leases:
+        mac, processed_macs = lease['mac'], processed_macs | {lease['mac']}
+        device_data = {"mac": mac, "ip": lease['ip'], "hostname": lease['hostname'], "is_online": True}
+        if mac in known_hosts_map:
+            device_data.update(known_hosts_map[mac]); device_data['assignment_status'] = "Reservation"
+        else:
+            device_data.update({"description": lease['hostname'], "assignment_status": "Dynamic", "network_access_blocked": False})
+            vlan_id = "unassigned"
+            try:
+                device_ip = ipaddress.ip_address(lease['ip'])
+                for subnet, v_id in subnet_to_vlan_map.items():
+                    if device_ip in subnet: vlan_id = v_id; break
+            except ValueError: pass
+            device_data['vlan_id'] = vlan_id
+        active_devices.append(device_data)
 
     for mac, host_config in known_hosts_map.items():
-        is_online = mac in active_macs or online_status_map.get(host_config.get("ip_assignment", {}).get("ip"), False)
-        device_data, lease = host_config.copy(), next((l for l in active_leases if l['mac'] == mac), {})
-        device_data.update({ "is_online": is_online, "ip": lease.get('ip') or host_config.get("ip_assignment", {}).get("ip"), "hostname": lease.get('hostname') or host_config.get("hostname"), "assignment_status": "Reservation" })
-        if is_online:
-            active_devices.append(device_data)
-        else:
+        if mac not in processed_macs:
+            device_data = host_config.copy()
+            device_data.update({"is_online": False, "assignment_status": "Reservation"})
             offline_reservations.append(device_data)
 
-    for lease in active_leases:
-        if lease['mac'] not in known_hosts_map:
-            active_devices.append({ "mac": lease['mac'], "ip": lease['ip'], "hostname": lease['hostname'], "description": lease['hostname'], "is_online": True, "assignment_status": "Dynamic", "network_access_blocked": False })
-    
-    networks = config.get("networks", [])
     network_map = {net['id']: net.get('name', net['id']) for net in networks}
     active_by_vlan, offline_by_vlan = {}, {}
-    
     all_vlan_ids = set(network_map.keys()) | {'unassigned'}
-    for vlan_id in all_vlan_ids:
-        active_by_vlan[vlan_id], offline_by_vlan[vlan_id] = [], []
+    for vlan_id in all_vlan_ids: active_by_vlan[vlan_id], offline_by_vlan[vlan_id] = [], []
     for device in active_devices: active_by_vlan.setdefault(device.get("vlan_id", "unassigned"), []).append(device)
     for device in offline_reservations: offline_by_vlan.setdefault(device.get("vlan_id", "unassigned"), []).append(device)
-    all_vlan_keys = sorted([k for k in all_vlan_ids if network_map.get(k) or active_by_vlan.get(k) or offline_by_vlan.get(k)], key=lambda x: (x == 'unassigned', x))
+    
+    all_vlan_keys = sorted([k for k in all_vlan_ids if network_map.get(k) or active_by_vlan[k] or offline_by_vlan[k]], key=lambda x: (x == 'unassigned', x))
     return render_template('home.html', all_vlan_keys=all_vlan_keys, active_by_vlan=active_by_vlan, offline_by_vlan=offline_by_vlan, network_map=network_map)
-
 
 @app.route('/network')
 @login_required
@@ -122,7 +117,6 @@ def home():
 def network_management():
     netplan_config = load_netplan_config() or {'network': {'vlans': {}}}
     return render_template('network.html', netplan_config=netplan_config)
-
 
 @app.route('/logs')
 @login_required
@@ -145,13 +139,12 @@ def logs():
     conn.close()
     return render_template('logs.html', logs=log_entries, all_users=all_users, selected_users=selected_users, start_time_val=start_time_str, end_time_val=end_time_str)
 
-# --- API Routes ---
 @app.route('/api/submit_job', methods=['POST'])
 @login_required
 def submit_job():
-    data = request.get_json(); job_type = data.get("job_type"); payload = data.get("payload", {})
+    data, job_type, payload = request.get_json(), request.get_json().get("job_type"), request.get_json().get("payload", {})
     if job_type in ["netplan:apply", "netplan:add_interface", "netplan:delete_interface", "api:vlan_toggle_access"] and current_user.role != 'admin':
-        return jsonify({"status": "error", "message": "Permission denied."}), 403
+         return jsonify({"status": "error", "message": "Permission denied."}), 403
     if job_type in ["shorewall:sync"] and current_user.role not in ['admin', 'operator']:
         return jsonify({"status": "error", "message": "Permission denied."}), 403
     job_id = add_job(job_type, payload, current_user.username)
@@ -163,8 +156,7 @@ def submit_job():
 def check_job_status(job_id):
     job = get_job_status(job_id)
     if not job: return jsonify({"status": "error", "message": "Job not found."}), 404
-    if job['requesting_user'] != current_user.username and current_user.role != 'admin':
-        return jsonify({"status": "error", "message": "Permission denied."}), 403
+    if job['requesting_user'] != current_user.username and current_user.role != 'admin': return jsonify({"status": "error", "message": "Permission denied."}), 403
     return jsonify(dict(job))
 
 @app.route('/api/host_details/<host_mac>')
@@ -173,11 +165,9 @@ def get_host_details(host_mac):
     config = load_config(); leases_file = config.get("system_paths", {}).get("dnsmasq_leases_file", "")
     host_config = get_host_by_mac(config, host_mac)[0] or {"mac": host_mac}
     lease_info = next((l for l in get_active_leases(leases_file) if l['mac'] == host_mac), None)
-    if lease_info:
-        host_config['ip'] = lease_info['ip']
-        host_config['hostname'] = host_config.get('hostname') or lease_info.get('hostname')
+    if lease_info: host_config['ip'], host_config['hostname'] = lease_info['ip'], host_config.get('hostname') or lease_info.get('hostname')
     return jsonify(host_config)
-    
+
 @app.route('/api/system_config')
 @login_required
 def get_system_config():
@@ -199,9 +189,7 @@ def update_host_config(host_mac):
     config['known_hosts'] = sorted(config['known_hosts'], key=lambda h: h.get('hostname', 'z').lower())
     save_config(config)
     log_event("INFO", "api:host:update", f"Config saved for '{hostname or host_mac}'", username=current_user.username)
-    if data.get('trigger_sync'):
-        add_job("shorewall:sync", {}, current_user.username)
-        log_event("INFO", "api:host:update", "Host config change triggered firewall sync.", username=current_user.username)
+    if data.get('trigger_sync'): add_job("shorewall:sync", {}, current_user.username); log_event("INFO", "api:host:update", "Host config change triggered", username=current_user.username)
     return jsonify({"status": "ok", "message": "Host configuration saved."})
 
 @app.route('/api/vlan_toggle_access', methods=['POST'])
@@ -214,7 +202,7 @@ def toggle_vlan_access():
         if host.get("vlan_id") == vlan_id: host['network_access_blocked'] = should_block
     save_config(config)
     vlan_name = next((n.get('name',vlan_id) for n in config.get("networks",[]) if n.get('id')==vlan_id), vlan_id)
-    log_event("WARNING" if should_block else "INFO", "api:vlan:toggle", f"Set network_access_blocked={should_block} for all hosts in VLAN '{vlan_name}'.", username=current_user.username)
+    log_event("WARNING" if should_block else "INFO", "api:vlan:toggle", f"Set network_access_blocked={should_block} for VLAN '{vlan_name}'.", username=current_user.username)
     add_job("shorewall:sync", {}, current_user.username)
     return jsonify({"status": "ok", "message": f"Queued job to {'block' if should_block else 'unblock'} VLAN."})
 
@@ -229,20 +217,16 @@ def get_bandwidth_data(host_id):
 @app.route('/api/online_status')
 @login_required
 def get_live_online_status():
-    config = load_config()
-    known_hosts_map = {h['mac'].lower(): h for h in config.get("known_hosts", [])}
+    config = load_config(); known_hosts_map = {h['mac'].lower(): h for h in config.get("known_hosts", [])}
     leases_file = config.get("system_paths", {}).get("dnsmasq_leases_file", "")
     active_leases = get_active_leases(leases_file) if leases_file else []
-    ips_to_check = {l['ip'] for l in active_leases}
-    ips_to_check.update({h.get("ip_assignment", {}).get("ip") for h in known_hosts_map.values() if h.get("ip_assignment", {}).get("ip")})
+    ips_to_check = {l['ip'] for l in active_leases} | {h.get("ip_assignment", {}).get("ip") for h in known_hosts_map.values() if h.get("ip_assignment", {}).get("ip")}
     online_status_map = check_multiple_hosts_online(list(filter(None, ips_to_check)))
     final_mac_status = {}
     ip_to_mac = {l['ip']: l['mac'] for l in active_leases}
     for ip, status in online_status_map.items():
-        if ip in ip_to_mac:
-            final_mac_status[ip_to_mac[ip]] = status
+        if ip in ip_to_mac: final_mac_status[ip_to_mac[ip]] = status
     for mac, host_config in known_hosts_map.items():
-        static_ip = host_config.get("ip_assignment", {}).get("ip")
-        if static_ip and static_ip in online_status_map:
-             final_mac_status[mac] = online_status_map[static_ip]
+        if static_ip := host_config.get("ip_assignment", {}).get("ip"):
+            if static_ip in online_status_map: final_mac_status[mac] = online_status_map[static_ip]
     return jsonify(final_mac_status)
