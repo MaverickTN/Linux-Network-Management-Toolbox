@@ -20,60 +20,48 @@ DB_FILE = Path("./inetctl_stats.db")
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
 
+# --- Flask-Login Configuration ---
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
-login_manager.login_message = "You must be logged in to access this page."
-login_manager.login_message_category = "error"
+login_manager.login_message, login_manager.login_message_category = "You must be logged in.", "error"
 
 @login_manager.user_loader
 def load_user(user_id):
     return get_user_by_id(int(user_id))
 
+# --- Role-based Access Decorator ---
 def roles_required(*roles):
     def wrapper(fn):
         @wraps(fn)
         def decorated_view(*args, **kwargs):
-            if not current_user.is_authenticated:
-                return login_manager.unauthorized()
-            if current_user.role not in roles:
-                return jsonify({"status": "error", "message": "Permission denied"}), 403
+            if not current_user.is_authenticated: return login_manager.unauthorized()
+            if current_user.role not in roles: return jsonify({"status": "error", "message": "Permission denied"}), 403
             return fn(*args, **kwargs)
         return decorated_view
     return wrapper
 
-def get_db_connection():
-    conn = sqlite3.connect(DB_FILE)
-    conn.row_factory = sqlite3.Row
-    return conn
-
+def get_db_connection(): conn = sqlite3.connect(DB_FILE); conn.row_factory = sqlite3.Row; return conn
 @app.template_filter("format_datetime")
-def format_datetime_filter(ts):
-    return datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M:%S") if ts else "N/A"
+def format_datetime_filter(ts): return datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M:%S") if ts else "N/A"
 
+# --- Authentication Routes ---
 @app.route("/login", methods=["GET", "POST"])
 def login():
-    if current_user.is_authenticated:
-        return redirect(url_for("home"))
+    if current_user.is_authenticated: return redirect(url_for("home"))
     if request.method == "POST":
-        username = request.form["username"]
-        password = request.form["password"]
+        username, password = request.form["username"], request.form["password"]
         user_obj, password_hash = get_user_by_name(username)
         if user_obj and verify_password(password, password_hash):
-            login_user(user_obj)
-            log_event("INFO", "auth:login", f"User '{username}' successfully logged in.", username=username)
-            return redirect(url_for("home"))
-        flash("Invalid username or password.", "error")
-        log_event("WARNING", "auth:login", f"Failed login for '{username}'.", username="anonymous")
+            login_user(user_obj); log_event("INFO", "auth:login", f"User '{username}' logged in.", username=username); return redirect(url_for("home"))
+        flash("Invalid username or password.", "error"); log_event("WARNING", "auth:login", f"Failed login for '{username}'.", username="anonymous")
     return render_template("login.html")
 
 @app.route("/logout")
 @login_required
-def logout():
-    log_event("INFO", "auth:logout", f"User '{current_user.username}' logged out.", username=current_user.username)
-    logout_user()
-    return redirect(url_for("login"))
+def logout(): log_event("INFO", "auth:logout", f"User '{current_user.username}' logged out.", username=current_user.username); logout_user(); return redirect(url_for("login"))
 
+# --- Main Application Routes ---
 @app.route("/")
 @login_required
 def home():
@@ -82,76 +70,32 @@ def home():
     leases_file = config.get("system_paths", {}).get("dnsmasq_leases_file", "")
     active_leases = get_active_leases(leases_file) if leases_file else []
     networks = config.get("networks", [])
-
-    subnet_to_vlan_map = {}
-    for net in networks:
-        if cidr := net.get("cidr"):
-            try:
-                subnet_to_vlan_map[ipaddress.ip_network(cidr)] = net['id']
-            except ValueError:
-                continue
-
+    network_map = {net['id']: net.get('name', net['id']) for net in networks}
+    subnet_to_vlan_map = {ipaddress.ip_network(net['cidr']): net['id'] for net in networks if net.get('cidr')}
     ips_to_check = {l['ip'] for l in active_leases} | {h.get("ip_assignment", {}).get("ip") for h in known_hosts_map.values() if h.get("ip_assignment", {}).get("ip")}
     online_status_map = check_multiple_hosts_online(list(filter(None, ips_to_check)))
-    
-    devices = []
-    processed_macs = set()
-
-    # Process configured hosts first
+    devices, processed_macs = [], set()
     for mac, host_config in known_hosts_map.items():
         processed_macs.add(mac)
-        lease = next((l for l in active_leases if l['mac'] == mac), None)
-        static_ip = host_config.get("ip_assignment", {}).get("ip")
-        is_online = (mac in {l['mac'] for l in active_leases}) or (static_ip and online_status_map.get(static_ip, False))
-
-        device = host_config.copy()
-        device.update({
-            "is_online": is_online,
-            "assignment_status": "Reservation",
-            "ip": lease.get('ip') if lease else static_ip,
-            "hostname": (lease.get('hostname') if lease and lease.get('hostname') != '(unknown)' else None) or host_config.get('hostname')
-        })
-        devices.append(device)
-
-    # Process dynamic leases that are not reservations
+        lease, static_ip = next((l for l in active_leases if l['mac'] == mac), None), host_config.get("ip_assignment", {}).get("ip")
+        is_online = mac in {l['mac'] for l in active_leases} or (static_ip and online_status_map.get(static_ip, False))
+        device = host_config.copy(); device.update({"is_online": is_online, "assignment_status": "Reservation", "ip": (lease['ip'] if lease else static_ip), "hostname": (lease['hostname'] if lease and lease['hostname'] != '(unknown)' else None) or host_config.get('hostname')}); devices.append(device)
     for lease in active_leases:
         if lease['mac'] not in processed_macs:
-            device_data = {
-                "mac": lease['mac'], "ip": lease['ip'], "hostname": lease['hostname'], "description": lease['hostname'], 
-                "is_online": True, "assignment_status": "Dynamic", "network_access_blocked": False
-            }
             vlan_id = "unassigned"
             try:
                 device_ip = ipaddress.ip_address(lease['ip'])
                 for network, vid in subnet_to_vlan_map.items():
-                    if device_ip in network:
-                        vlan_id = vid
-                        break
-            except ValueError:
-                pass
-            device_data['vlan_id'] = vlan_id
-            devices.append(device_data)
-            
-    # Group devices for UI presentation
-    active_by_vlan, offline_by_vlan = {}, {}
-    network_map = {net['id']: net.get('name', net['id']) for net in networks}
-    network_map['unassigned'] = 'Unassigned'
-
-    all_vlan_ids = set(network_map.keys())
-    for vlan_id in all_vlan_ids:
-        active_by_vlan[vlan_id], offline_by_vlan[vlan_id] = [], []
-
+                    if device_ip in network: vlan_id = vid; break
+            except ValueError: pass
+            devices.append({"mac": lease['mac'], "ip": lease['ip'], "hostname": lease['hostname'], "description": lease['hostname'], "is_online": True, "assignment_status": "Dynamic", "vlan_id": vlan_id, "network_access_blocked": False})
+    active_by_vlan, offline_by_vlan = {}, {}; all_vlan_ids = set(network_map.keys()) | {'unassigned'}
+    for vlan_id in all_vlan_ids: active_by_vlan[vlan_id], offline_by_vlan[vlan_id] = [], []
     for device in devices:
-        vlan_id = device.get("vlan_id", "unassigned")
-        if device.get('is_online'):
-            active_by_vlan.setdefault(vlan_id, []).append(device)
-        else:
-            offline_by_vlan.setdefault(vlan_id, []).append(device)
-
-    all_vlan_keys = sorted([k for k, v in network_map.items() if active_by_vlan[k] or offline_by_vlan[k]], key=lambda x: (x == 'unassigned', x))
-
+        bucket = active_by_vlan if device.get('is_online') else offline_by_vlan
+        bucket.setdefault(device.get('vlan_id', 'unassigned'), []).append(device)
+    all_vlan_keys = sorted([k for k, v in network_map.items()] + [k for k in ['unassigned'] if k not in network_map], key=lambda x: (x == 'unassigned', x))
     return render_template('home.html', all_vlan_keys=all_vlan_keys, active_by_vlan=active_by_vlan, offline_by_vlan=offline_by_vlan, network_map=network_map)
-
 
 @app.route('/network')
 @login_required
@@ -164,8 +108,7 @@ def network_management():
 @login_required
 @roles_required('admin')
 def logs():
-    conn = get_db_connection()
-    query, params, conditions = "SELECT * FROM event_log", [], []
+    conn = get_db_connection(); query, params, conditions = "SELECT * FROM event_log", [], []
     start_time_str, end_time_str, selected_users = request.args.get('start_time'), request.args.get('end_time'), request.args.getlist('users')
     end_ts, start_ts = int(time.time()), int(time.time() - 86400)
     try: start_ts = int(datetime.strptime(start_time_str, '%Y-%m-%dT%H:%M:%S').timestamp())
