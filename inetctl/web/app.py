@@ -20,6 +20,7 @@ DB_FILE = Path("./inetctl_stats.db")
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
 
+# --- Flask-Login Configuration ---
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
@@ -29,6 +30,7 @@ login_manager.login_message, login_manager.login_message_category = "You must be
 def load_user(user_id):
     return get_user_by_id(int(user_id))
 
+# --- Role-based Access Decorator ---
 def roles_required(*roles):
     def wrapper(fn):
         @wraps(fn)
@@ -43,6 +45,7 @@ def get_db_connection(): conn = sqlite3.connect(DB_FILE); conn.row_factory = sql
 @app.template_filter("format_datetime")
 def format_datetime_filter(ts): return datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M:%S") if ts else "N/A"
 
+# --- Authentication Routes ---
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if current_user.is_authenticated: return redirect(url_for("home"))
@@ -58,6 +61,7 @@ def login():
 @login_required
 def logout(): log_event("INFO", "auth:logout", f"User '{current_user.username}' logged out.", username=current_user.username); logout_user(); return redirect(url_for("login"))
 
+# --- Main Application Routes ---
 @app.route("/")
 @login_required
 def home():
@@ -68,24 +72,18 @@ def home():
     networks = config.get("networks", [])
     network_map = {net['id']: net.get('name', net['id']) for net in networks}
     subnet_map = {ipaddress.ip_network(net['cidr']): net['id'] for net in networks if net.get('cidr')}
-    
-    ips_to_check = {l['ip'] for l in active_leases} | {h.get("ip_assignment", {}).get("ip") for h in known_hosts_map.values() if h.get("ip_assignment", {}).get("ip")}
-    online_status_map = check_multiple_hosts_online(list(filter(None, ips_to_check)))
+
+    all_ips = {l['ip'] for l in active_leases} | {h.get("ip_assignment", {}).get("ip") for h in known_hosts_map.values() if h.get("ip_assignment", {}).get("ip")}
+    online_status_map = check_multiple_hosts_online(list(filter(None, all_ips)))
     
     devices = []
     processed_macs = set()
-
     for mac, host_config in known_hosts_map.items():
         processed_macs.add(mac)
-        lease = next((l for l in active_leases if l['mac'] == mac), None)
-        static_ip = host_config.get("ip_assignment", {}).get("ip")
+        lease, static_ip = next((l for l in active_leases if l['mac'] == mac), None), host_config.get("ip_assignment", {}).get("ip")
         is_online = mac in {l['mac'] for l in active_leases} or (static_ip and online_status_map.get(static_ip, False))
         device = host_config.copy()
-        device.update({
-            "is_online": is_online, "assignment_status": "Reservation",
-            "ip": lease.get('ip') if lease else static_ip,
-            "hostname": (lease.get('hostname') if lease and lease.get('hostname') != '(unknown)' else None) or host_config.get('hostname')
-        })
+        device.update({"is_online": is_online, "assignment_status": "Reservation", "ip": (lease['ip'] if lease else static_ip), "hostname": (lease['hostname'] if lease and lease['hostname'] != '(unknown)' else None) or host_config.get('hostname')})
         devices.append(device)
     
     for lease in active_leases:
@@ -101,7 +99,6 @@ def home():
     active_by_vlan, offline_by_vlan = {}, {}
     if 'unassigned' not in network_map: network_map['unassigned'] = 'Unassigned'
     all_vlan_ids = set(network_map.keys())
-    
     for vlan_id in all_vlan_ids: active_by_vlan[vlan_id], offline_by_vlan[vlan_id] = [], []
 
     for device in devices:
@@ -111,10 +108,8 @@ def home():
         else:
             offline_by_vlan.setdefault(vlan_id, []).append(device)
 
-    all_vlan_keys = sorted([k for k in network_map.keys() if active_by_vlan.get(k) or offline_by_vlan.get(k)], key=lambda x: (x == 'unassigned', x))
-
+    all_vlan_keys = sorted([k for k in network_map if active_by_vlan.get(k) or offline_by_vlan.get(k)], key=lambda x: (x == 'unassigned', x))
     return render_template('home.html', all_vlan_keys=all_vlan_keys, active_by_vlan=active_by_vlan, offline_by_vlan=offline_by_vlan, network_map=network_map)
-
 
 @app.route('/network')
 @login_required
@@ -122,7 +117,6 @@ def home():
 def network_management():
     netplan_config = load_netplan_config() or {'network': {'vlans': {}}}
     return render_template('network.html', netplan_config=netplan_config)
-
 
 @app.route('/logs')
 @login_required
@@ -133,11 +127,11 @@ def logs():
     start_time_str, end_time_str, selected_users = request.args.get('start_time'), request.args.get('end_time'), request.args.getlist('users')
     end_ts, start_ts = int(time.time()), int(time.time() - 86400)
     try: start_ts = int(datetime.strptime(start_time_str, '%Y-%m-%dT%H:%M:%S').timestamp())
-    except(ValueError, TypeError): pass
+    except (ValueError, TypeError): pass
     try: end_ts = int(datetime.strptime(end_time_str, '%Y-%m-%dT%H:%M:%S').timestamp())
-    except(ValueError, TypeError): pass
+    except (ValueError, TypeError): pass
     conditions.append("timestamp BETWEEN ? AND ?"); params.extend([start_ts, end_ts])
-    if selected_users: conditions.append(f"username IN ({','.join('?'*len(selected_users))})"); params.extend(selected_users)
+    if selected_users: conditions.append(f"username IN ({', '.join('?'*len(selected_users))})"); params.extend(selected_users)
     if conditions: query += " WHERE " + " AND ".join(conditions)
     query += " ORDER BY timestamp DESC"
     log_entries, all_users = conn.execute(query, params).fetchall(), get_all_users()
@@ -149,11 +143,11 @@ def logs():
 def submit_job():
     data, job_type, payload = request.get_json(), request.get_json().get("job_type"), request.get_json().get("payload", {})
     if job_type in ["netplan:apply", "netplan:add_interface", "netplan:delete_interface", "api:vlan_toggle_access"] and current_user.role != 'admin':
-         return jsonify({"status": "error", "message": "Permission denied."}), 403
+        return jsonify({"status": "error", "message": "Permission denied."}), 403
     if job_type in ["shorewall:sync"] and current_user.role not in ['admin', 'operator']:
         return jsonify({"status": "error", "message": "Permission denied."}), 403
     job_id = add_job(job_type, payload, current_user.username)
-    log_event("INFO", f"api:{job_type}", f"Job {job_id} created for payload: {json.dumps(payload)}", username=current_user.username)
+    log_event("INFO", f"api:{job_type}", f"Job {job_id} created", username=current_user.username)
     return jsonify({"status": "queued", "job_id": job_id})
 
 @app.route('/api/job_status/<int:job_id>')
@@ -202,13 +196,11 @@ def update_host_config(host_mac):
 @roles_required('admin')
 def toggle_vlan_access():
     data, vlan_id, should_block = request.get_json(), request.get_json().get('vlan_id'), request.get_json().get('block', True)
-    config = load_config()
+    config = load_config();
     for host in config.get("known_hosts", []):
         if host.get("vlan_id") == vlan_id: host['network_access_blocked'] = should_block
-    save_config(config)
-    vlan_name = next((n.get('name',vlan_id) for n in config.get("networks",[]) if n.get('id')==vlan_id), vlan_id)
-    log_event("WARNING" if should_block else "INFO", "api:vlan:toggle", f"Set network_access_blocked={should_block} for all hosts in VLAN '{vlan_name}'.", username=current_user.username)
-    add_job("shorewall:sync", {}, current_user.username)
+    save_config(config); vlan_name = next((n.get('name',vlan_id) for n in config.get("networks",[]) if n.get('id')==vlan_id), vlan_id)
+    log_event("WARNING" if should_block else "INFO", "api:vlan:toggle", f"Set network_access_blocked={should_block} for VLAN '{vlan_name}'.", username=current_user.username); add_job("shorewall:sync", {}, current_user.username)
     return jsonify({"status": "ok", "message": f"Queued job to {'block' if should_block else 'unblock'} VLAN."})
 
 @app.route('/data/bandwidth/<host_id>')
