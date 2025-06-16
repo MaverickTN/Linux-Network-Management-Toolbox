@@ -12,3 +12,5 @@
 /.vs/Linux-Network-Management-Toolbox/v17/DocumentLayout.json
 /.vs/Linux-Network-Management-Toolbox/config
 /.vs/Linux-Network-Management-Toolbox/copilot-chat/1e67f494/sessions
+.vscode/settings.json
+.gitignore
