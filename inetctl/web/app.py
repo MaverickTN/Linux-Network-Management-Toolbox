@@ -19,6 +19,22 @@ DB_FILE = Path("./inetctl_stats.db")
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
 
+# --- VLAN/Subnet Mapping Functions ---
+def build_subnet_map(netplan, base_cidr='192.168.1.0/24'):
+    subnet_map = {}
+    subnet_map[ipaddress.ip_network(base_cidr)] = "1"
+    for vlan in netplan['network'].get('vlans', {}).values():
+        if 'cidr' in vlan and 'id' in vlan:
+            subnet_map[ipaddress.ip_network(vlan['cidr'])] = str(vlan['id'])
+    return subnet_map
+
+def get_vlan_id_for_ip(ip, subnet_map):
+    ip_obj = ipaddress.ip_address(ip)
+    for subnet, vlan_id in subnet_map.items():
+        if ip_obj in subnet:
+            return vlan_id
+    return "1"
+
 # --- Flask-Login Configuration ---
 login_manager = LoginManager()
 login_manager.init_app(app)
@@ -76,7 +92,6 @@ def home():
     config = load_config()
     netplan = load_netplan_config()
 
-    # Add base interface as VLAN 1
     networks = []
     base_iface = netplan.get('base_interface', 'eth0')
     base_name = netplan.get('base_name', 'Base')
@@ -91,7 +106,7 @@ def home():
 
     vlan_ids = sorted([net['id'] for net in networks], key=int)
     network_map = {net['id']: net['name'] for net in networks}
-    subnet_map = {ipaddress.ip_network(net['cidr']): net['id'] for net in networks if net.get('cidr')}
+    subnet_map = build_subnet_map(netplan, config.get('base_cidr', '192.168.1.0/24'))
 
     known_hosts_map = {h['mac'].lower(): h for h in config.get("known_hosts", [])}
     leases_file = config.get("system_paths", {}).get("dnsmasq_leases_file", "")
@@ -107,7 +122,14 @@ def home():
         lease = next((l for l in active_leases if l['mac'] == mac), None)
         static_ip = host_config.get("ip_assignment", {}).get("ip")
         is_online = mac in {l['mac'] for l in active_leases} or (static_ip and online_status_map.get(static_ip, False))
-        device_vlan_id = str(host_config.get('vlan_id', '1'))  # default to '1'
+
+        # VLAN assignment by config or static IP subnet
+        if "vlan_id" in host_config:
+            device_vlan_id = str(host_config["vlan_id"])
+        elif static_ip:
+            device_vlan_id = get_vlan_id_for_ip(static_ip, subnet_map)
+        else:
+            device_vlan_id = "1"
 
         device = host_config.copy()
         device.update({
@@ -123,16 +145,7 @@ def home():
 
     for lease in active_leases:
         if lease['mac'] not in processed_macs:
-            vlan_id = None
-            for net, vid in subnet_map.items():
-                try:
-                    if ipaddress.ip_address(lease['ip']) in net:
-                        vlan_id = vid
-                        break
-                except Exception:
-                    continue
-            if vlan_id is None:
-                vlan_id = '1'
+            vlan_id = get_vlan_id_for_ip(lease['ip'], subnet_map)
             devices.append({
                 "mac": lease['mac'],
                 "ip": lease['ip'],
@@ -229,7 +242,21 @@ def api_host(mac):
     leases_file = config.get("system_paths", {}).get("dnsmasq_leases_file", "")
     active_leases = get_active_leases(leases_file) if leases_file else []
     lease = next((l for l in active_leases if l['mac'].lower() == mac.lower()), None)
-    vlan_id = str(host.get('vlan_id', '1')) if host else "1"
+    vlan_id = None
+    static_ip = None
+    if host:
+        static_ip = host.get('ip_assignment', {}).get('ip')
+        if "vlan_id" in host:
+            vlan_id = str(host["vlan_id"])
+        elif static_ip:
+            netplan = load_netplan_config()
+            config_base_cidr = config.get('base_cidr', '192.168.1.0/24')
+            subnet_map = build_subnet_map(netplan, config_base_cidr)
+            vlan_id = get_vlan_id_for_ip(static_ip, subnet_map)
+        else:
+            vlan_id = "1"
+    else:
+        vlan_id = "1"
     netplan = load_netplan_config()
     vlan_cfg = None
     if vlan_id == "1":
