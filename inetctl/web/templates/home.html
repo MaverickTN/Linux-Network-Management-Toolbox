@@ -52,7 +52,6 @@
             margin-bottom: 0.2em;
             cursor: pointer;
         }
-        /* Modal for transfer graph */
         #transfer-modal {
             position: fixed;
             top: 0; left: 0; width: 100vw; height: 100vh;
@@ -90,11 +89,7 @@
                 <li style="margin-right:10px;">
                     <button onclick="showTab('{{ vlan_id }}')" id="tab-btn-{{ vlan_id }}"
                         {% if loop.first %}class="active"{% endif %}>
-                        {% if vlan_id == 'unassigned' %}
-                            {{ network_map.get(vlan_id, 'LAN') }}
-                        {% else %}
-                            VLAN {{ network_map.get(vlan_id, vlan_id) }}
-                        {% endif %}
+                        VLAN {{ vlan_id }}
                     </button>
                 </li>
                 {% endfor %}
@@ -104,13 +99,7 @@
         {% for vlan_id in vlan_ids %}
         <div id="tab-{{ vlan_id }}" class="tab-content" style="{% if not loop.first %}display:none;{% endif %}">
             <!-- Main Table: Active Devices/Assignments (including active reserved) -->
-            <h2>Active Assignments - 
-                {% if vlan_id == 'unassigned' %}
-                    {{ network_map.get(vlan_id, 'LAN') }}
-                {% else %}
-                    VLAN {{ network_map.get(vlan_id, vlan_id) }}
-                {% endif %}
-            </h2>
+            <h2>Active Assignments - VLAN {{ vlan_id }}</h2>
             <table>
                 <thead>
                     <tr>
