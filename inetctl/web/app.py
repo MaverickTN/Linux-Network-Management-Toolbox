@@ -127,7 +127,7 @@ def home():
     unassigned_by_vlan = {}
 
     if 'unassigned' not in network_map:
-        network_map['unassigned'] = 'Unassigned'
+        network_map['unassigned'] = 'LAN'
 
     all_vlan_ids = set(network_map.keys())
     for vlan_id in all_vlan_ids:
@@ -145,9 +145,17 @@ def home():
         else:
             active_by_vlan[vlan_id].append(d)
 
+    # Sort VLANs for tab order (numeric where possible, else lexicographic)
+    def vlan_sort_key(v):
+        try:
+            return int(v)
+        except Exception:
+            return str(v)
+    vlan_ids = sorted(all_vlan_ids, key=vlan_sort_key)
+
     return render_template(
         "home.html",
-        vlan_ids=list(all_vlan_ids),
+        vlan_ids=vlan_ids,
         active_by_vlan=active_by_vlan,
         unassigned_by_vlan=unassigned_by_vlan,
         network_map=network_map,
@@ -155,4 +163,53 @@ def home():
         current_user=current_user,
     )
 
-# (Other routes can follow below...)
+@app.route("/toggle_access", methods=["POST"])
+@login_required
+def toggle_access():
+    data = request.get_json()
+    mac = data.get("mac", "").lower()
+    config = load_config()
+    hosts = config.get("known_hosts", [])
+    leases_file = config.get("system_paths", {}).get("dnsmasq_leases_file", "")
+    active_leases = get_active_leases(leases_file) if leases_file else []
+
+    host = next((h for h in hosts if h.get("mac", "").lower() == mac), None)
+    if not host:
+        return jsonify(success=False, message="Host not found"), 404
+    lease = next((l for l in active_leases if l['mac'].lower() == mac), None)
+    ip = lease['ip'] if lease else host.get("ip_assignment", {}).get("ip")
+    if not ip:
+        return jsonify(success=False, message="Could not determine IP for host"), 400
+
+    blocked = host.get("network_access_blocked", False)
+    job_type = "block_access" if not blocked else "allow_access"
+    job_payload = {
+        "mac": mac,
+        "ip": ip,
+        "username": current_user.username
+    }
+    job_id = add_job(job_type, job_payload)
+    return jsonify(success=True, queued=True, job_id=job_id,
+                   message=f"{'Block' if not blocked else 'Allow'} request queued for {ip}.")
+
+@app.route("/job_status/<job_id>")
+@login_required
+def job_status(job_id):
+    status = get_job_status(job_id)
+    return jsonify(status)
+
+@app.route("/api/transfer/<mac>")
+@login_required
+def transfer_api(mac):
+    hours = int(request.args.get("hours", 1))
+    end_time = int(time.time())
+    start_time = end_time - (hours * 3600)
+    conn = get_db_connection()
+    rows = conn.execute(
+        "SELECT timestamp, rx, tx FROM transfers WHERE mac = ? AND timestamp BETWEEN ? AND ? ORDER BY timestamp ASC",
+        (mac.lower(), start_time, end_time)
+    ).fetchall()
+    conn.close()
+    return jsonify([
+        {"timestamp": row["timestamp"], "rx": row["rx"], "tx": row["tx"]} for row in rows
+    ])

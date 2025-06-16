@@ -9,8 +9,19 @@
     <style>
         :root { --pico-font-size: 14px; --pico-grid-spacing-horizontal: 1.5rem; }
         body { padding-bottom: 5em; }
-        .assignment-badge.reserved {
+        #vlan-tabs button.active {
             background-color: #007bff;
+            color: white;
+            border-radius: 0.5em;
+        }
+        .assignment-badge.reservation {
+            background-color: #007bff;
+            color: white;
+            padding: 0.2em 0.5em;
+            border-radius: 0.3em;
+        }
+        .assignment-badge.dynamic {
+            background-color: #ff9800;
             color: white;
             padding: 0.2em 0.5em;
             border-radius: 0.3em;
@@ -19,7 +30,54 @@
         .online { background-color: #43a047; }
         .offline { background-color: #757575; }
         .blocked { background-color: #e53935; }
-        /* Add more styles as needed */
+        .btn-toggle.allow {
+            background-color: #43a047;
+            color: white;
+            border-radius: 0.3em;
+            border: none;
+            padding: 0.4em 0.9em;
+            cursor: pointer;
+        }
+        .btn-toggle.block {
+            background-color: #e53935;
+            color: white;
+            border-radius: 0.3em;
+            border: none;
+            padding: 0.4em 0.9em;
+            cursor: pointer;
+        }
+        .mini-transfer-graph {
+            width: 90px;
+            height: 25px;
+            margin-bottom: 0.2em;
+            cursor: pointer;
+        }
+        /* Modal for transfer graph */
+        #transfer-modal {
+            position: fixed;
+            top: 0; left: 0; width: 100vw; height: 100vh;
+            background: rgba(0,0,0,0.4);
+            display: flex; justify-content: center; align-items: center;
+            z-index: 1000;
+        }
+        #transfer-modal > div {
+            background: white;
+            padding: 2em;
+            border-radius: 1em;
+            max-width: 800px;
+            width: 95vw;
+            position: relative;
+        }
+        #transfer-modal button.close-modal {
+            position: absolute;
+            top: 1em;
+            right: 1em;
+            font-size: 1.2em;
+            background: none;
+            border: none;
+            color: #e53935;
+            cursor: pointer;
+        }
     </style>
 </head>
 <body>
@@ -31,7 +89,13 @@
                 {% for vlan_id in vlan_ids %}
                 <li style="margin-right:10px;">
                     <button onclick="showTab('{{ vlan_id }}')" id="tab-btn-{{ vlan_id }}"
-                        {% if loop.first %}class="active"{% endif %}>VLAN {{ network_map.get(vlan_id, vlan_id) }}</button>
+                        {% if loop.first %}class="active"{% endif %}>
+                        {% if vlan_id == 'unassigned' %}
+                            {{ network_map.get(vlan_id, 'LAN') }}
+                        {% else %}
+                            VLAN {{ network_map.get(vlan_id, vlan_id) }}
+                        {% endif %}
+                    </button>
                 </li>
                 {% endfor %}
             </ul>
@@ -40,7 +104,13 @@
         {% for vlan_id in vlan_ids %}
         <div id="tab-{{ vlan_id }}" class="tab-content" style="{% if not loop.first %}display:none;{% endif %}">
             <!-- Main Table: Active Devices/Assignments (including active reserved) -->
-            <h2>Active Assignments - VLAN {{ network_map.get(vlan_id, vlan_id) }}</h2>
+            <h2>Active Assignments - 
+                {% if vlan_id == 'unassigned' %}
+                    {{ network_map.get(vlan_id, 'LAN') }}
+                {% else %}
+                    VLAN {{ network_map.get(vlan_id, vlan_id) }}
+                {% endif %}
+            </h2>
             <table>
                 <thead>
                     <tr>
@@ -49,7 +119,8 @@
                         <th>Description/Hostname</th>
                         <th>MAC/IP</th>
                         <th style="text-align:center;">Internet</th>
-                        <th style="text-align: right;">Stats & Actions</th>
+                        <th style="text-align:center;">Transfer</th>
+                        <th style="text-align: right;">Actions</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -59,7 +130,9 @@
                             <span class="status-dot {{ 'blocked' if device.network_access_blocked else ('online' if device.is_online else 'offline') }}" data-mac-status="{{ device.mac }}"></span>
                         </td>
                         <td>
-                            <span class="assignment-badge {{ device.assignment_status|lower }}">{{ device.assignment_status }}</span>
+                            <span class="assignment-badge {{ device.assignment_status|lower }}">
+                                {{ device.assignment_status == "Reservation" and "Reservation" or "Dynamic" }}
+                            </span>
                         </td>
                         <td>
                             <strong>{{ device.description }}</strong><br>
@@ -69,7 +142,15 @@
                             <small>{{ device.mac }}<br>{{ device.ip or 'N/A' }}</small>
                         </td>
                         <td style="text-align: center;">
-                            <!-- You may have internet access status here -->
+                            {% if device.network_access_blocked %}
+                              <button class="btn-toggle allow" onclick="toggleAccess('{{ device.mac }}')">Allow</button>
+                            {% else %}
+                              <button class="btn-toggle block" onclick="toggleAccess('{{ device.mac }}')">Block</button>
+                            {% endif %}
+                        </td>
+                        <td style="text-align:center;">
+                            <canvas id="mini-transfer-{{ device.mac|replace(':','') }}" class="mini-transfer-graph"></canvas>
+                            <div id="transfer-rates-{{ device.mac|replace(':','') }}">Loading...</div>
                         </td>
                         <td style="text-align: right;">
                             <button class="btn-edit" onclick="editReservation('{{ device.mac }}')">Edit</button>
@@ -94,7 +175,7 @@
                     {% for reservation in unassigned_by_vlan.get(vlan_id, []) %}
                     <tr>
                         <td>
-                            <span class="assignment-badge reserved">Reserved</span>
+                            <span class="assignment-badge reservation">Reservation</span>
                         </td>
                         <td>
                             <strong>{{ reservation.description }}</strong><br>
@@ -113,21 +194,176 @@
         </div>
         {% endfor %}
 
+        <!-- Modal container for expanded transfer graph -->
+        <div id="transfer-modal-root"></div>
+
     </main>
     <script>
+        // VLAN tab logic
         function showTab(vlan_id) {
-            // Hide all tab-content divs
             document.querySelectorAll('.tab-content').forEach(tab => tab.style.display = 'none');
-            // Remove active class from all tab buttons
             document.querySelectorAll('#vlan-tabs button').forEach(btn => btn.classList.remove('active'));
-            // Show selected tab
             document.getElementById('tab-' + vlan_id).style.display = 'block';
-            // Set active class
             document.getElementById('tab-btn-' + vlan_id).classList.add('active');
         }
         function editReservation(mac) {
-            // Replace this with your actual edit page logic
             window.location.href = '/edit_reservation/' + mac;
+        }
+
+        // Toggle access logic with job queue and toast notifications
+        function toggleAccess(mac) {
+            fetch('/toggle_access', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ mac: mac })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.queued) {
+                    Toastify({
+                        text: data.message,
+                        backgroundColor: "#007bff",
+                        duration: 5000
+                    }).showToast();
+                    pollJobStatus(data.job_id, mac);
+                } else {
+                    Toastify({
+                        text: "Error: " + (data.message || "Failed to queue action."),
+                        backgroundColor: "#e53935",
+                        duration: 5000
+                    }).showToast();
+                }
+            });
+        }
+        function pollJobStatus(jobId, mac) {
+            fetch('/job_status/' + jobId)
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === "pending" || data.status === "running") {
+                    setTimeout(() => pollJobStatus(jobId, mac), 1000);
+                } else if (data.status === "success") {
+                    Toastify({
+                        text: "Success: Network access updated for " + mac,
+                        backgroundColor: "#43a047",
+                        duration: 5000
+                    }).showToast();
+                    setTimeout(() => window.location.reload(), 1200);
+                } else {
+                    Toastify({
+                        text: "Error: " + (data.message || "Action failed."),
+                        backgroundColor: "#e53935",
+                        duration: 8000
+                    }).showToast();
+                }
+            });
+        }
+
+        // Transfer mini-graph + modal logic
+        document.addEventListener('DOMContentLoaded', function() {
+            {% for vlan_id in vlan_ids %}
+                {% for device in active_by_vlan.get(vlan_id, []) %}
+                    loadMiniGraph("{{ device.mac|replace(':','') }}", "{{ device.mac }}");
+                {% endfor %}
+            {% endfor %}
+        });
+
+        function loadMiniGraph(canvasId, mac) {
+            fetch(`/api/transfer/${mac}?hours=1`)
+            .then(response => response.json())
+            .then(data => {
+                const ctx = document.getElementById("mini-transfer-" + canvasId).getContext('2d');
+                const times = data.map(d => new Date(d.timestamp*1000).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}));
+                const rx = data.map(d => d.rx / 1024); // KB/s
+                const tx = data.map(d => d.tx / 1024);
+                new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: times,
+                        datasets: [
+                            { data: rx, borderColor: "#007bff", fill: false, pointRadius: 0, borderWidth: 1.2 },
+                            { data: tx, borderColor: "#43a047", fill: false, pointRadius: 0, borderWidth: 1.2 }
+                        ]
+                    },
+                    options: {
+                        plugins: { legend: { display: false } },
+                        scales: { x: { display: false }, y: { display: false } },
+                        responsive: false,
+                        maintainAspectRatio: false,
+                        animation: false
+                    }
+                });
+                if (data.length > 0) {
+                    const last = data[data.length-1];
+                    document.getElementById("transfer-rates-" + canvasId).textContent =
+                        `⬇ ${(last.rx/1024).toFixed(1)} KB/s ⬆ ${(last.tx/1024).toFixed(1)} KB/s`;
+                } else {
+                    document.getElementById("transfer-rates-" + canvasId).textContent = "No data";
+                }
+                document.getElementById("mini-transfer-" + canvasId).style.cursor = "pointer";
+                document.getElementById("mini-transfer-" + canvasId).onclick = function() {
+                    openTransferModal(mac);
+                };
+            });
+        }
+
+        function openTransferModal(mac) {
+            let modalRoot = document.getElementById("transfer-modal-root");
+            modalRoot.innerHTML = `
+                <div id="transfer-modal">
+                    <div>
+                        <button class="close-modal" onclick="document.getElementById('transfer-modal-root').innerHTML=''">✖</button>
+                        <h3>Transfer History</h3>
+                        <select id="hours-select" style="margin-bottom:1em;">
+                            <option value="1">1 hour</option>
+                            <option value="3">3 hours</option>
+                            <option value="12">12 hours</option>
+                            <option value="24">24 hours</option>
+                        </select>
+                        <canvas id="large-transfer-chart" height="240"></canvas>
+                        <div id="current-transfer"></div>
+                    </div>
+                </div>
+            `;
+            document.getElementById('hours-select').onchange = function() {
+                loadLargeGraph(mac, parseInt(this.value));
+            };
+            loadLargeGraph(mac, 1);
+        }
+
+        function loadLargeGraph(mac, hours) {
+            fetch(`/api/transfer/${mac}?hours=${hours}`)
+            .then(response => response.json())
+            .then(data => {
+                const ctx = document.getElementById("large-transfer-chart").getContext('2d');
+                if (window.largeTransferChart) window.largeTransferChart.destroy();
+                const times = data.map(d => new Date(d.timestamp*1000).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}));
+                const rx = data.map(d => d.rx / 1024);
+                const tx = data.map(d => d.tx / 1024);
+                window.largeTransferChart = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: times,
+                        datasets: [
+                            { label: "Download (KB/s)", data: rx, borderColor: "#007bff", fill: false, pointRadius: 1.5, borderWidth: 2 },
+                            { label: "Upload (KB/s)", data: tx, borderColor: "#43a047", fill: false, pointRadius: 1.5, borderWidth: 2 }
+                        ]
+                    },
+                    options: {
+                        plugins: { legend: { display: true } },
+                        scales: { x: { display: true, title: {display: true, text: "Time"} }, y: { display: true, title: {display: true, text: "KB/s"}} },
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        animation: false
+                    }
+                });
+                if (data.length > 0) {
+                    const last = data[data.length-1];
+                    document.getElementById("current-transfer").textContent =
+                        `Current: ⬇ ${(last.rx/1024).toFixed(1)} KB/s ⬆ ${(last.tx/1024).toFixed(1)} KB/s`;
+                } else {
+                    document.getElementById("current-transfer").textContent = "No data";
+                }
+            });
         }
     </script>
 </body>
