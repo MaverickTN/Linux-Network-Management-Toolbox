@@ -1,9 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Linux Network Management Toolbox</title>
+    <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Linux Network Management Toolbox</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css" />
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
@@ -27,85 +25,108 @@
 <body>
     <main class="container">
         <h1>Linux Network Management Toolbox</h1>
-
-        <!-- Main Table: Active/Assigned Reservations (Reserved leases in blue) -->
-        <h2>Active Assignments</h2>
-        <table>
-            <thead>
-                <tr>
-                    <th>Status</th>
-                    <th>Assignment</th>
-                    <th>Description/Hostname</th>
-                    <th>MAC/IP</th>
-                    <th style="text-align:center;">Internet</th>
-                    <th style="text-align: right;">Stats & Actions</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for device in assigned_reservations %}
-                <tr>
-                    <td>
-                        <span class="status-dot {{ 'blocked' if device.network_access_blocked else ('online' if device.is_online else 'offline') }}"></span>
-                    </td>
-                    <td>
-                        <span class="assignment-badge reserved">Reserved</span>
-                    </td>
-                    <td>
-                        <strong>{{ device.description }}</strong><br>
-                        <small>{{ device.hostname }}</small>
-                    </td>
-                    <td>
-                        <small>{{ device.mac }}<br>{{ device.ip or 'N/A' }}</small>
-                    </td>
-                    <td style="text-align: center;">
-                        <!-- Internet access info here if desired -->
-                    </td>
-                    <td style="text-align: right;">
-                        <button class="btn-edit" onclick="editReservation('{{ device.mac }}')">Edit</button>
-                    </td>
-                </tr>
+        <!-- VLAN Tabs -->
+        <nav>
+            <ul id="vlan-tabs" style="display:flex; list-style-type:none; padding:0; margin-bottom:1rem;">
+                {% for vlan_id in vlan_ids %}
+                <li style="margin-right:10px;">
+                    <button onclick="showTab('{{ vlan_id }}')" id="tab-btn-{{ vlan_id }}"
+                        {% if loop.first %}class="active"{% endif %}>VLAN {{ network_map.get(vlan_id, vlan_id) }}</button>
+                </li>
                 {% endfor %}
-            </tbody>
-        </table>
+            </ul>
+        </nav>
 
-        <!-- Table for Unassigned Reservations -->
-        <h3>Other Reservations</h3>
-        <table>
-            <thead>
-                <tr>
-                    <th>Status</th>
-                    <th>Description/Hostname</th>
-                    <th>MAC/IP</th>
-                    <th style="text-align: right;">Actions</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for reservation in unassigned_reservations %}
-                <tr>
-                    <td>
-                        <span class="assignment-badge reserved">Reserved</span>
-                    </td>
-                    <td>
-                        <strong>{{ reservation.description }}</strong><br>
-                        <small>{{ reservation.hostname }}</small>
-                    </td>
-                    <td>
-                        <small>{{ reservation.mac }}<br>{{ reservation.ip or 'N/A' }}</small>
-                    </td>
-                    <td style="text-align: right;">
-                        <button class="btn-edit" onclick="editReservation('{{ reservation.mac }}')">Edit</button>
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+        {% for vlan_id in vlan_ids %}
+        <div id="tab-{{ vlan_id }}" class="tab-content" style="{% if not loop.first %}display:none;{% endif %}">
+            <!-- Main Table: Active Devices/Assignments (including active reserved) -->
+            <h2>Active Assignments - VLAN {{ network_map.get(vlan_id, vlan_id) }}</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Status</th>
+                        <th>Assignment</th>
+                        <th>Description/Hostname</th>
+                        <th>MAC/IP</th>
+                        <th style="text-align:center;">Internet</th>
+                        <th style="text-align: right;">Stats & Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for device in active_by_vlan.get(vlan_id, []) %}
+                    <tr>
+                        <td>
+                            <span class="status-dot {{ 'blocked' if device.network_access_blocked else ('online' if device.is_online else 'offline') }}" data-mac-status="{{ device.mac }}"></span>
+                        </td>
+                        <td>
+                            <span class="assignment-badge {{ device.assignment_status|lower }}">{{ device.assignment_status }}</span>
+                        </td>
+                        <td>
+                            <strong>{{ device.description }}</strong><br>
+                            <small>{{ device.hostname }}</small>
+                        </td>
+                        <td>
+                            <small>{{ device.mac }}<br>{{ device.ip or 'N/A' }}</small>
+                        </td>
+                        <td style="text-align: center;">
+                            <!-- You may have internet access status here -->
+                        </td>
+                        <td style="text-align: right;">
+                            <button class="btn-edit" onclick="editReservation('{{ device.mac }}')">Edit</button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
 
-        <!-- Add your other dashboard content below as needed -->
+            <!-- "Other Reservations" Table: Unassigned Reservations (per VLAN) -->
+            <h3>Other Reservations</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Status</th>
+                        <th>Description/Hostname</th>
+                        <th>MAC/IP</th>
+                        <th style="text-align: right;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for reservation in unassigned_by_vlan.get(vlan_id, []) %}
+                    <tr>
+                        <td>
+                            <span class="assignment-badge reserved">Reserved</span>
+                        </td>
+                        <td>
+                            <strong>{{ reservation.description }}</strong><br>
+                            <small>{{ reservation.hostname }}</small>
+                        </td>
+                        <td>
+                            <small>{{ reservation.mac }}<br>{{ reservation.ip or 'N/A' }}</small>
+                        </td>
+                        <td style="text-align: right;">
+                            <button class="btn-edit" onclick="editReservation('{{ reservation.mac }}')">Edit</button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endfor %}
 
     </main>
     <script>
+        function showTab(vlan_id) {
+            // Hide all tab-content divs
+            document.querySelectorAll('.tab-content').forEach(tab => tab.style.display = 'none');
+            // Remove active class from all tab buttons
+            document.querySelectorAll('#vlan-tabs button').forEach(btn => btn.classList.remove('active'));
+            // Show selected tab
+            document.getElementById('tab-' + vlan_id).style.display = 'block';
+            // Set active class
+            document.getElementById('tab-btn-' + vlan_id).classList.add('active');
+        }
         function editReservation(mac) {
-            // Replace this with your actual edit action
+            // Replace this with your actual edit page logic
             window.location.href = '/edit_reservation/' + mac;
         }
     </script>
