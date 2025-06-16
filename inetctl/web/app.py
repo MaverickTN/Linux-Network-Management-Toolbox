@@ -1,7 +1,6 @@
 import sqlite3
 import time
 import os
-import json
 import ipaddress
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
@@ -30,7 +29,6 @@ login_manager.login_message, login_manager.login_message_category = "You must be
 def load_user(user_id):
     return get_user_by_id(int(user_id))
 
-# --- Role-based Access Decorator ---
 def roles_required(*roles):
     def wrapper(fn):
         @wraps(fn)
@@ -50,7 +48,6 @@ def get_db_connection():
 def format_datetime_filter(ts):
     return datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M:%S") if ts else "N/A"
 
-# --- Authentication Routes ---
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if current_user.is_authenticated:
@@ -77,12 +74,31 @@ def logout():
 @login_required
 def home():
     config = load_config()
+    # --- VLAN and Interface Mapping ---
+    # 1. Parse netplan config for VLAN IDs
+    netplan = load_netplan_config()  # Should return dict with 'base_interface', 'base_name', and 'network'
+
+    # Add base interface as VLAN 1
+    networks = []
+    base_iface = netplan.get('base_interface', 'eth0')
+    base_name = netplan.get('base_name', 'Base')
+    networks.append({'id': '1', 'interface': base_iface, 'name': base_name})
+    # Add VLANs
+    for vlan_name, vlan_def in netplan['network'].get('vlans', {}).items():
+        networks.append({
+            'id': str(vlan_def['id']),
+            'interface': vlan_name,
+            'name': vlan_name,
+        })
+
+    vlan_ids = sorted([net['id'] for net in networks], key=int)
+    network_map = {net['id']: net['name'] for net in networks}
+
+    # --- Device logic ---
     known_hosts_map = {h['mac'].lower(): h for h in config.get("known_hosts", [])}
     leases_file = config.get("system_paths", {}).get("dnsmasq_leases_file", "")
     active_leases = get_active_leases(leases_file) if leases_file else []
-    networks = config.get("networks", [])
-    network_map = {net['id']: net.get('name', net['id']) for net in networks}
-    subnet_map = {ipaddress.ip_network(net['cidr']): net['id'] for net in networks if net.get('cidr')}
+    subnet_map = {ipaddress.ip_network(net.get('cidr', '0.0.0.0/0')): net['id'] for net in networks if net.get('cidr')}
 
     ips_to_check = {l['ip'] for l in active_leases} | {h.get("ip_assignment", {}).get("ip") for h in known_hosts_map.values() if h.get("ip_assignment", {}).get("ip")}
     online_status_map = check_multiple_hosts_online(list(filter(None, ips_to_check)))
@@ -94,22 +110,23 @@ def home():
         lease = next((l for l in active_leases if l['mac'] == mac), None)
         static_ip = host_config.get("ip_assignment", {}).get("ip")
         is_online = mac in {l['mac'] for l in active_leases} or (static_ip and online_status_map.get(static_ip, False))
+        device_vlan_id = str(host_config.get('vlan_id', '1'))  # default to '1'
 
         device = host_config.copy()
         device.update({
             "is_online": is_online,
-            "assignment_status": "Reservation",  # Reserved static assignment
+            "assignment_status": "Reservation",
             "ip": (lease['ip'] if lease else static_ip),
             "hostname": (lease.get('hostname') if lease and lease.get('hostname') != '(unknown)' else host_config.get('hostname')),
-            "vlan_id": host_config.get('vlan_id', 'unassigned'),
+            "vlan_id": device_vlan_id,
             "network_access_blocked": host_config.get("network_access_blocked", False),
         })
-        device["is_active"] = bool(lease)  # True if lease is active for reservation
+        device["is_active"] = bool(lease)
         devices.append(device)
 
     for lease in active_leases:
         if lease['mac'] not in processed_macs:
-            vlan_id = next((vid for net, vid in subnet_map.items() if ipaddress.ip_address(lease['ip']) in net), "unassigned")
+            vlan_id = next((vid for net, vid in subnet_map.items() if ipaddress.ip_address(lease['ip']) in net), "1")
             devices.append({
                 "mac": lease['mac'],
                 "ip": lease['ip'],
@@ -126,32 +143,20 @@ def home():
     offline_by_vlan = {}
     unassigned_by_vlan = {}
 
-    if 'unassigned' not in network_map:
-        network_map['unassigned'] = 'LAN'
-
-    all_vlan_ids = set(network_map.keys())
-    for vlan_id in all_vlan_ids:
+    for vlan_id in vlan_ids:
         active_by_vlan[vlan_id] = []
         offline_by_vlan[vlan_id] = []
         unassigned_by_vlan[vlan_id] = []
 
     for d in devices:
-        vlan_id = d.get('vlan_id', 'unassigned')
+        vlan_id = d.get('vlan_id', '1')
         if d.get('assignment_status') == "Reservation":
             if d.get("is_active"):
-                active_by_vlan[vlan_id].append(d)  # Reserved and assigned
+                active_by_vlan[vlan_id].append(d)
             else:
-                unassigned_by_vlan[vlan_id].append(d)  # Reserved but not assigned
+                unassigned_by_vlan[vlan_id].append(d)
         else:
             active_by_vlan[vlan_id].append(d)
-
-    # Sort VLANs for tab order (numeric where possible, else lexicographic)
-    def vlan_sort_key(v):
-        try:
-            return int(v)
-        except Exception:
-            return str(v)
-    vlan_ids = sorted(all_vlan_ids, key=vlan_sort_key)
 
     return render_template(
         "home.html",
