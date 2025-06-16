@@ -74,31 +74,28 @@ def logout():
 @login_required
 def home():
     config = load_config()
-    # --- VLAN and Interface Mapping ---
-    # 1. Parse netplan config for VLAN IDs
-    netplan = load_netplan_config()  # Should return dict with 'base_interface', 'base_name', and 'network'
+    netplan = load_netplan_config()
 
     # Add base interface as VLAN 1
     networks = []
     base_iface = netplan.get('base_interface', 'eth0')
     base_name = netplan.get('base_name', 'Base')
-    networks.append({'id': '1', 'interface': base_iface, 'name': base_name})
-    # Add VLANs
+    networks.append({'id': '1', 'interface': base_iface, 'name': base_name, 'cidr': config.get('base_cidr', '192.168.1.0/24')})
     for vlan_name, vlan_def in netplan['network'].get('vlans', {}).items():
         networks.append({
             'id': str(vlan_def['id']),
             'interface': vlan_name,
             'name': vlan_name,
+            'cidr': vlan_def.get('cidr', '192.168.100.0/24')
         })
 
     vlan_ids = sorted([net['id'] for net in networks], key=int)
     network_map = {net['id']: net['name'] for net in networks}
+    subnet_map = {ipaddress.ip_network(net['cidr']): net['id'] for net in networks if net.get('cidr')}
 
-    # --- Device logic ---
     known_hosts_map = {h['mac'].lower(): h for h in config.get("known_hosts", [])}
     leases_file = config.get("system_paths", {}).get("dnsmasq_leases_file", "")
     active_leases = get_active_leases(leases_file) if leases_file else []
-    subnet_map = {ipaddress.ip_network(net.get('cidr', '0.0.0.0/0')): net['id'] for net in networks if net.get('cidr')}
 
     ips_to_check = {l['ip'] for l in active_leases} | {h.get("ip_assignment", {}).get("ip") for h in known_hosts_map.values() if h.get("ip_assignment", {}).get("ip")}
     online_status_map = check_multiple_hosts_online(list(filter(None, ips_to_check)))
@@ -126,7 +123,16 @@ def home():
 
     for lease in active_leases:
         if lease['mac'] not in processed_macs:
-            vlan_id = next((vid for net, vid in subnet_map.items() if ipaddress.ip_address(lease['ip']) in net), "1")
+            vlan_id = None
+            for net, vid in subnet_map.items():
+                try:
+                    if ipaddress.ip_address(lease['ip']) in net:
+                        vlan_id = vid
+                        break
+                except Exception:
+                    continue
+            if vlan_id is None:
+                vlan_id = '1'
             devices.append({
                 "mac": lease['mac'],
                 "ip": lease['ip'],
@@ -139,14 +145,9 @@ def home():
                 "is_active": True,
             })
 
-    active_by_vlan = {}
-    offline_by_vlan = {}
-    unassigned_by_vlan = {}
-
-    for vlan_id in vlan_ids:
-        active_by_vlan[vlan_id] = []
-        offline_by_vlan[vlan_id] = []
-        unassigned_by_vlan[vlan_id] = []
+    active_by_vlan = {vlan_id: [] for vlan_id in vlan_ids}
+    offline_by_vlan = {vlan_id: [] for vlan_id in vlan_ids}
+    unassigned_by_vlan = {vlan_id: [] for vlan_id in vlan_ids}
 
     for d in devices:
         vlan_id = d.get('vlan_id', '1')
@@ -218,3 +219,46 @@ def transfer_api(mac):
     return jsonify([
         {"timestamp": row["timestamp"], "rx": row["rx"], "tx": row["tx"]} for row in rows
     ])
+
+@app.route("/api/host/<mac>", methods=["GET", "POST"])
+@login_required
+def api_host(mac):
+    config = load_config()
+    hosts = config.get("known_hosts", [])
+    host = next((h for h in hosts if h.get("mac", "").lower() == mac.lower()), None)
+    leases_file = config.get("system_paths", {}).get("dnsmasq_leases_file", "")
+    active_leases = get_active_leases(leases_file) if leases_file else []
+    lease = next((l for l in active_leases if l['mac'].lower() == mac.lower()), None)
+    vlan_id = str(host.get('vlan_id', '1')) if host else "1"
+    netplan = load_netplan_config()
+    vlan_cfg = None
+    if vlan_id == "1":
+        vlan_cfg = {"cidr": config.get('base_cidr', '192.168.1.0/24')}
+    else:
+        vlan_cfg = next((v for v in netplan['network'].get('vlans', {}).values() if str(v['id']) == vlan_id), None)
+    subnet = vlan_cfg['cidr'] if vlan_cfg and 'cidr' in vlan_cfg else "255.255.255.0"
+    if request.method == "GET":
+        return jsonify({
+            "mac": mac,
+            "description": host.get('description', '') if host else '',
+            "ip": lease['ip'] if lease else (host.get('ip_assignment', {}).get('ip', '') if host else ''),
+            "subnet": subnet,
+            "qos_profile": host.get('qos_profile', 'Default') if host else "Default",
+            "qos_dl": host.get('qos_dl', '') if host else '',
+            "qos_ul": host.get('qos_ul', '') if host else '',
+            "schedule": host.get('schedule', '') if host else ''
+        })
+    if request.method == "POST":
+        data = request.get_json()
+        if not host:
+            return jsonify(success=False, message="Host not found"), 404
+        host['description'] = data.get('description', '')
+        if 'ip_assignment' not in host:
+            host['ip_assignment'] = {}
+        host['ip_assignment']['ip'] = data.get('ip', '')
+        host['qos_profile'] = data.get('qos_profile', 'Default')
+        host['qos_dl'] = data.get('qos_dl', '')
+        host['qos_ul'] = data.get('qos_ul', '')
+        host['schedule'] = data.get('schedule', '')
+        save_config(config)
+        return jsonify(success=True)

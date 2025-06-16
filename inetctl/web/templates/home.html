@@ -52,22 +52,24 @@
             margin-bottom: 0.2em;
             cursor: pointer;
         }
-        #transfer-modal {
+        #transfer-modal, #host-edit-modal {
             position: fixed;
             top: 0; left: 0; width: 100vw; height: 100vh;
             background: rgba(0,0,0,0.4);
             display: flex; justify-content: center; align-items: center;
             z-index: 1000;
         }
-        #transfer-modal > div {
+        #transfer-modal > div,
+        #host-edit-modal > div {
             background: white;
             padding: 2em;
             border-radius: 1em;
-            max-width: 800px;
+            max-width: 480px;
             width: 95vw;
             position: relative;
         }
-        #transfer-modal button.close-modal {
+        #transfer-modal button.close-modal,
+        #host-edit-modal button.close-modal {
             position: absolute;
             top: 1em;
             right: 1em;
@@ -76,6 +78,13 @@
             border: none;
             color: #e53935;
             cursor: pointer;
+        }
+        .modal-field {
+            margin-bottom: 0.7em;
+        }
+        .octet-input[readonly] {
+            background: #eee;
+            color: #888;
         }
     </style>
 </head>
@@ -95,7 +104,6 @@
                 {% endfor %}
             </ul>
         </nav>
-
         {% for vlan_id in vlan_ids %}
         <div id="tab-{{ vlan_id }}" class="tab-content" style="{% if not loop.first %}display:none;{% endif %}">
             <h2>Active Assignments - VLAN {{ vlan_id }}</h2>
@@ -138,16 +146,20 @@
                         </td>
                         <td style="text-align:center;">
                             <canvas id="mini-transfer-{{ device.mac|replace(':','') }}" class="mini-transfer-graph"></canvas>
-                            <div id="transfer-rates-{{ device.mac|replace(':','') }}">Loading...</div>
+                            <div id="transfer-rates-{{ device.mac|replace(':','') }}">
+                                Loading...
+                            </div>
+                            <div id="transfer-rates-text-{{ device.mac|replace(':','') }}" style="font-size: 0.95em; color: #444;">
+                                &nbsp;
+                            </div>
                         </td>
                         <td style="text-align: right;">
-                            <button class="btn-edit" onclick="editReservation('{{ device.mac }}')">Edit</button>
+                            <button class="btn-edit" onclick="openEditModal('{{ device.mac }}')">Edit</button>
                         </td>
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
-
             <h3>Other Reservations</h3>
             <table>
                 <thead>
@@ -172,7 +184,7 @@
                             <small>{{ reservation.mac }}<br>{{ reservation.ip or 'N/A' }}</small>
                         </td>
                         <td style="text-align: right;">
-                            <button class="btn-edit" onclick="editReservation('{{ reservation.mac }}')">Edit</button>
+                            <button class="btn-edit" onclick="openEditModal('{{ reservation.mac }}')">Edit</button>
                         </td>
                     </tr>
                     {% endfor %}
@@ -180,21 +192,20 @@
             </table>
         </div>
         {% endfor %}
-
-        <!-- Modal container for expanded transfer graph -->
         <div id="transfer-modal-root"></div>
-
+        <div id="host-edit-modal-root"></div>
     </main>
     <script>
+        // VLAN tab logic
         function showTab(vlan_id) {
             document.querySelectorAll('.tab-content').forEach(tab => tab.style.display = 'none');
             document.querySelectorAll('#vlan-tabs button').forEach(btn => btn.classList.remove('active'));
             document.getElementById('tab-' + vlan_id).style.display = 'block';
             document.getElementById('tab-btn-' + vlan_id).classList.add('active');
         }
-        function editReservation(mac) {
-            window.location.href = '/edit_reservation/' + mac;
-        }
+        function editReservation(mac) { openEditModal(mac); }
+
+        // Toggle access logic with job queue and toast notifications
         function toggleAccess(mac) {
             fetch('/toggle_access', {
                 method: 'POST',
@@ -222,4 +233,236 @@
         function pollJobStatus(jobId, mac) {
             fetch('/job_status/' + jobId)
             .then(response => response.json())
-            .then
+            .then(data => {
+                if (data.status === "pending" || data.status === "running") {
+                    setTimeout(() => pollJobStatus(jobId, mac), 1000);
+                } else if (data.status === "success") {
+                    Toastify({
+                        text: "Success: Network access updated for " + mac,
+                        backgroundColor: "#43a047",
+                        duration: 5000
+                    }).showToast();
+                    setTimeout(() => window.location.reload(), 1200);
+                } else {
+                    Toastify({
+                        text: "Error: " + (data.message || "Action failed."),
+                        backgroundColor: "#e53935",
+                        duration: 8000
+                    }).showToast();
+                }
+            });
+        }
+
+        // Transfer mini-graph + modal logic
+        document.addEventListener('DOMContentLoaded', function() {
+            {% for vlan_id in vlan_ids %}
+                {% for device in active_by_vlan.get(vlan_id, []) %}
+                    loadMiniGraph("{{ device.mac|replace(':','') }}", "{{ device.mac }}");
+                {% endfor %}
+            {% endfor %}
+        });
+        function loadMiniGraph(canvasId, mac) {
+            fetch(`/api/transfer/${mac}?hours=1`)
+            .then(response => response.json())
+            .then(data => {
+                const ctx = document.getElementById("mini-transfer-" + canvasId).getContext('2d');
+                const rx = data.map(d => d.rx / 1024); // KB/s
+                const tx = data.map(d => d.tx / 1024);
+                new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: data.map(d => new Date(d.timestamp*1000).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})),
+                        datasets: [
+                            { data: rx, borderColor: "#007bff", fill: false, pointRadius: 0, borderWidth: 1.2 },
+                            { data: tx, borderColor: "#43a047", fill: false, pointRadius: 0, borderWidth: 1.2 }
+                        ]
+                    },
+                    options: {
+                        plugins: { legend: { display: false } },
+                        scales: { x: { display: false }, y: { display: false } },
+                        responsive: false,
+                        maintainAspectRatio: false,
+                        animation: false
+                    }
+                });
+                if (data.length > 0) {
+                    const last = data[data.length-1];
+                    const rxText = (last.rx / 1024).toFixed(1);
+                    const txText = (last.tx / 1024).toFixed(1);
+                    document.getElementById("transfer-rates-" + canvasId).textContent =
+                        `⬇ ${rxText} KB/s ⬆ ${txText} KB/s`;
+                    document.getElementById("transfer-rates-text-" + canvasId).textContent =
+                        `Download: ${rxText} KB/s, Upload: ${txText} KB/s`;
+                } else {
+                    document.getElementById("transfer-rates-" + canvasId).textContent = "No data";
+                    document.getElementById("transfer-rates-text-" + canvasId).textContent = "";
+                }
+                document.getElementById("mini-transfer-" + canvasId).style.cursor = "pointer";
+                document.getElementById("mini-transfer-" + canvasId).onclick = function() {
+                    openTransferModal(mac);
+                };
+            })
+            .catch(() => {
+                document.getElementById("transfer-rates-" + canvasId).textContent = "No data";
+                document.getElementById("transfer-rates-text-" + canvasId).textContent = "";
+            });
+        }
+        function openTransferModal(mac) {
+            let modalRoot = document.getElementById("transfer-modal-root");
+            modalRoot.innerHTML = `
+                <div id="transfer-modal">
+                    <div>
+                        <button class="close-modal" onclick="document.getElementById('transfer-modal-root').innerHTML=''">✖</button>
+                        <h3>Transfer History</h3>
+                        <select id="hours-select" style="margin-bottom:1em;">
+                            <option value="1">1 hour</option>
+                            <option value="3">3 hours</option>
+                            <option value="12">12 hours</option>
+                            <option value="24">24 hours</option>
+                        </select>
+                        <canvas id="large-transfer-chart" height="240"></canvas>
+                        <div id="current-transfer"></div>
+                    </div>
+                </div>
+            `;
+            document.getElementById('hours-select').onchange = function() {
+                loadLargeGraph(mac, parseInt(this.value));
+            };
+            loadLargeGraph(mac, 1);
+        }
+        function loadLargeGraph(mac, hours) {
+            fetch(`/api/transfer/${mac}?hours=${hours}`)
+            .then(response => response.json())
+            .then(data => {
+                const ctx = document.getElementById("large-transfer-chart").getContext('2d');
+                if (window.largeTransferChart) window.largeTransferChart.destroy();
+                const times = data.map(d => new Date(d.timestamp*1000).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}));
+                const rx = data.map(d => d.rx / 1024);
+                const tx = data.map(d => d.tx / 1024);
+                window.largeTransferChart = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: times,
+                        datasets: [
+                            { label: "Download (KB/s)", data: rx, borderColor: "#007bff", fill: false, pointRadius: 1.5, borderWidth: 2 },
+                            { label: "Upload (KB/s)", data: tx, borderColor: "#43a047", fill: false, pointRadius: 1.5, borderWidth: 2 }
+                        ]
+                    },
+                    options: {
+                        plugins: { legend: { display: true } },
+                        scales: { x: { display: true, title: {display: true, text: "Time"} }, y: { display: true, title: {display: true, text: "KB/s"}} },
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        animation: false
+                    }
+                });
+                if (data.length > 0) {
+                    const last = data[data.length-1];
+                    document.getElementById("current-transfer").textContent =
+                        `Current: ⬇ ${(last.rx/1024).toFixed(1)} KB/s ⬆ ${(last.tx/1024).toFixed(1)} KB/s`;
+                } else {
+                    document.getElementById("current-transfer").textContent = "No data";
+                }
+            });
+        }
+
+        // -------- Host Edit Modal logic --------
+        function openEditModal(mac) {
+            fetch(`/api/host/${mac}`)
+            .then(resp => resp.json())
+            .then(data => {
+                let octets = data.ip.split('.');
+                let mask = data.subnet.split('.').map(Number);
+                let locked = mask.map(x => x === 255);
+                let ipFields = octets.map((octet, i) =>
+                    locked[i]
+                        ? `<input value="${octet}" readonly style="width:40px; margin-right:2px;" class="octet-input" tabindex="-1">`
+                        : `<input id="octet-${i}" value="${octet}" style="width:40px; margin-right:2px;" class="octet-input">`
+                ).join('');
+                let profiles = ['Default', 'VoIP Priority', 'Streaming', 'Gaming', 'Custom'];
+                let profileOptions = profiles.map(p =>
+                    `<option value="${p}"${p === data.qos_profile ? ' selected' : ''}>${p}</option>`
+                ).join('');
+                let modal = document.getElementById("host-edit-modal-root");
+                modal.innerHTML = `
+                <div id="host-edit-modal">
+                    <div>
+                        <button class="close-modal" onclick="closeEditModal()">✖</button>
+                        <h3>Edit Host (${data.mac})</h3>
+                        <div class="modal-field">
+                            <label>Hostname/Description:</label>
+                            <input id="edit-desc" value="${data.description || ''}">
+                        </div>
+                        <div class="modal-field">
+                            <label>DHCP Reservation:</label>
+                            <div>${ipFields}</div>
+                            <div style="font-size: 0.85em; color: #888;">
+                                Editable fields correspond to your subnet size.
+                            </div>
+                        </div>
+                        <div class="modal-field">
+                            <label>QoS Profile:</label>
+                            <select id="qos-profile" onchange="toggleCustomQoS()">${profileOptions}</select>
+                            <div id="custom-qos-fields" style="display:${data.qos_profile === 'Custom' ? 'block':'none'}">
+                                <label>Download (Mbps): <input id="qos-dl" type="number" min="1" max="10000" value="${data.qos_dl || ''}"></label>
+                                <label>Upload (Mbps): <input id="qos-ul" type="number" min="1" max="10000" value="${data.qos_ul || ''}"></label>
+                            </div>
+                        </div>
+                        <div class="modal-field">
+                            <label>Schedule Blacklist (offline):</label>
+                            <input id="edit-schedule" type="text" value="${data.schedule || ''}" placeholder="e.g., 22:00-06:00">
+                            <div style="font-size: 0.85em; color: #888;">Time range when this host will be offline (24h format).</div>
+                        </div>
+                        <div style="margin-top:1em; text-align:right;">
+                            <button onclick="closeEditModal()">Cancel</button>
+                            <button onclick="saveHost('${mac}')">Save</button>
+                        </div>
+                    </div>
+                </div>
+                `;
+                document.body.style.overflow = "hidden";
+            });
+        }
+        function closeEditModal() {
+            document.getElementById("host-edit-modal-root").innerHTML = "";
+            document.body.style.overflow = "";
+        }
+        function toggleCustomQoS() {
+            var prof = document.getElementById("qos-profile").value;
+            document.getElementById("custom-qos-fields").style.display = prof === "Custom" ? "block" : "none";
+        }
+        function saveHost(mac) {
+            // Collect edited data
+            let ip = [];
+            for (let i = 0; i < 4; i++) {
+                let field = document.getElementById('octet-' + i);
+                ip.push(field ? field.value : document.querySelector(`input[readonly][tabindex="-1"]`).value);
+            }
+            let payload = {
+                mac: mac,
+                description: document.getElementById('edit-desc').value,
+                ip: ip.join('.'),
+                qos_profile: document.getElementById('qos-profile').value,
+                qos_dl: document.getElementById('qos-dl') ? document.getElementById('qos-dl').value : "",
+                qos_ul: document.getElementById('qos-ul') ? document.getElementById('qos-ul').value : "",
+                schedule: document.getElementById('edit-schedule').value
+            };
+            fetch(`/api/host/${mac}`, {
+                method: "POST",
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(payload)
+            })
+            .then(resp => resp.json())
+            .then(data => {
+                Toastify({
+                    text: data.success ? "Host updated!" : "Error saving host.",
+                    backgroundColor: data.success ? "#43a047" : "#e53935",
+                    duration: 4000
+                }).showToast();
+                if (data.success) setTimeout(() => window.location.reload(), 1000);
+            });
+            closeEditModal();
+        }
+    </script>
+</body>
+</html>
