@@ -222,4 +222,128 @@
         function pollJobStatus(jobId, mac) {
             fetch('/job_status/' + jobId)
             .then(response => response.json())
-            .then
+            .then(data => {
+                if (data.status === "pending" || data.status === "running") {
+                    setTimeout(() => pollJobStatus(jobId, mac), 1000);
+                } else if (data.status === "success") {
+                    Toastify({
+                        text: "Success: Network access updated for " + mac,
+                        backgroundColor: "#43a047",
+                        duration: 5000
+                    }).showToast();
+                    setTimeout(() => window.location.reload(), 1200);
+                } else {
+                    Toastify({
+                        text: "Error: " + (data.message || "Action failed."),
+                        backgroundColor: "#e53935",
+                        duration: 8000
+                    }).showToast();
+                }
+            });
+        }
+        document.addEventListener('DOMContentLoaded', function() {
+            {% for vlan_id in vlan_ids %}
+                {% for device in active_by_vlan.get(vlan_id, []) %}
+                    loadMiniGraph("{{ device.mac|replace(':','') }}", "{{ device.mac }}");
+                {% endfor %}
+            {% endfor %}
+        });
+        function loadMiniGraph(canvasId, mac) {
+            fetch(`/api/transfer/${mac}?hours=1`)
+            .then(response => response.json())
+            .then(data => {
+                const ctx = document.getElementById("mini-transfer-" + canvasId).getContext('2d');
+                const times = data.map(d => new Date(d.timestamp*1000).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}));
+                const rx = data.map(d => d.rx / 1024);
+                const tx = data.map(d => d.tx / 1024);
+                new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: times,
+                        datasets: [
+                            { data: rx, borderColor: "#007bff", fill: false, pointRadius: 0, borderWidth: 1.2 },
+                            { data: tx, borderColor: "#43a047", fill: false, pointRadius: 0, borderWidth: 1.2 }
+                        ]
+                    },
+                    options: {
+                        plugins: { legend: { display: false } },
+                        scales: { x: { display: false }, y: { display: false } },
+                        responsive: false,
+                        maintainAspectRatio: false,
+                        animation: false
+                    }
+                });
+                if (data.length > 0) {
+                    const last = data[data.length-1];
+                    document.getElementById("transfer-rates-" + canvasId).textContent =
+                        `⬇ ${(last.rx/1024).toFixed(1)} KB/s ⬆ ${(last.tx/1024).toFixed(1)} KB/s`;
+                } else {
+                    document.getElementById("transfer-rates-" + canvasId).textContent = "No data";
+                }
+                document.getElementById("mini-transfer-" + canvasId).style.cursor = "pointer";
+                document.getElementById("mini-transfer-" + canvasId).onclick = function() {
+                    openTransferModal(mac);
+                };
+            });
+        }
+        function openTransferModal(mac) {
+            let modalRoot = document.getElementById("transfer-modal-root");
+            modalRoot.innerHTML = `
+                <div id="transfer-modal">
+                    <div>
+                        <button class="close-modal" onclick="document.getElementById('transfer-modal-root').innerHTML=''">✖</button>
+                        <h3>Transfer History</h3>
+                        <select id="hours-select" style="margin-bottom:1em;">
+                            <option value="1">1 hour</option>
+                            <option value="3">3 hours</option>
+                            <option value="12">12 hours</option>
+                            <option value="24">24 hours</option>
+                        </select>
+                        <canvas id="large-transfer-chart" height="240"></canvas>
+                        <div id="current-transfer"></div>
+                    </div>
+                </div>
+            `;
+            document.getElementById('hours-select').onchange = function() {
+                loadLargeGraph(mac, parseInt(this.value));
+            };
+            loadLargeGraph(mac, 1);
+        }
+        function loadLargeGraph(mac, hours) {
+            fetch(`/api/transfer/${mac}?hours=${hours}`)
+            .then(response => response.json())
+            .then(data => {
+                const ctx = document.getElementById("large-transfer-chart").getContext('2d');
+                if (window.largeTransferChart) window.largeTransferChart.destroy();
+                const times = data.map(d => new Date(d.timestamp*1000).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}));
+                const rx = data.map(d => d.rx / 1024);
+                const tx = data.map(d => d.tx / 1024);
+                window.largeTransferChart = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: times,
+                        datasets: [
+                            { label: "Download (KB/s)", data: rx, borderColor: "#007bff", fill: false, pointRadius: 1.5, borderWidth: 2 },
+                            { label: "Upload (KB/s)", data: tx, borderColor: "#43a047", fill: false, pointRadius: 1.5, borderWidth: 2 }
+                        ]
+                    },
+                    options: {
+                        plugins: { legend: { display: true } },
+                        scales: { x: { display: true, title: {display: true, text: "Time"} }, y: { display: true, title: {display: true, text: "KB/s"}} },
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        animation: false
+                    }
+                });
+                if (data.length > 0) {
+                    const last = data[data.length-1];
+                    document.getElementById("current-transfer").textContent =
+                        `Current: ⬇ ${(last.rx/1024).toFixed(1)} KB/s ⬆ ${(last.tx/1024).toFixed(1)} KB/s`;
+                } else {
+                    document.getElementById("current-transfer").textContent = "No data";
+                }
+            });
+        }
+    </script>
+</body>
+</html>
