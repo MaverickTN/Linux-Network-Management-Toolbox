@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>User Profile</h2>
+<form method="post" autocomplete="off">
+    <label>Email:
+        <input type="email" name="email" value="{{ user.email or '' }}">
+    </label>
+    <label>Theme:
+        <select name="theme">
+            {% for key, name in themes.items() %}
+            <option value="{{ key }}" {% if key == current_theme %}selected{% endif %}>{{ name }}</option>
+            {% endfor %}
+        </select>
+    </label>
+    <!-- More notification/option settings can go here -->
+    <button type="submit">Save</button>
+</form>
+{% endblock %}

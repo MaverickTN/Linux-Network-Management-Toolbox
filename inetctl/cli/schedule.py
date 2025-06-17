@@ -1,145 +1,142 @@
 import typer
-import getpass
-from datetime import datetime
-from typing import Optional
+from pathlib import Path
+import json
+from datetime import time
 
-from inetctl.core.config_loader import load_config, save_config, find_config_file
-from inetctl.core.utils import run_command, get_host_by_mac, get_active_leases
-from inetctl.core.logger import log_event
+from inetctl.core.config_loader import (
+    load_config, save_config, find_config_file, get_title
+)
+from inetctl.theme import THEMES
 
 app = typer.Typer(
     name="schedule",
-    help="Manage and apply time-based access control schedules.",
-    no_args_is_help=True
+    help=f"Manage scheduled network access for hosts ({get_title()})."
 )
 
-VALID_DAYS = {"mon": 0, "tue": 1, "wed": 2, "thu": 3, "fri": 4, "sat": 5, "sun": 6}
+def print_t(text, style="primary"):
+    theme = THEMES["dark"]
+    cli = theme["cli"]
+    print(f"{cli.get(style, '')}{text}{cli['reset']}")
 
-def is_time_in_range(start_str: str, end_str: str, check_time: datetime.time) -> bool:
-    """Checks if a time is within a given range, handling overnight periods."""
+def parse_timeblock(block_str):
+    """Parse a block in 'HH:MM-HH:MM' format."""
     try:
-        start_time = datetime.strptime(start_str, "%H:%M").time()
-        end_time = datetime.strptime(end_str, "%H:%M").time()
-    except (ValueError, TypeError):
-        return False
+        start, end = block_str.split("-")
+        sh, sm = map(int, start.strip().split(":"))
+        eh, em = map(int, end.strip().split(":"))
+        return (time(sh, sm), time(eh, em))
+    except Exception:
+        raise ValueError("Time block must be in format HH:MM-HH:MM")
 
-    if start_time <= end_time:
-        # Same-day range (e.g., 09:00 - 17:00)
-        return start_time <= check_time < end_time
-    else:
-        # Overnight range (e.g., 21:00 - 07:00)
-        return check_time >= start_time or check_time < end_time
+def overlap(t1, t2):
+    """Check if t1 and t2 (tuples of (start, end)) overlap."""
+    return not (t1[1] <= t2[0] or t2[1] <= t1[0])
+
+def timeblock_to_str(tblock):
+    return f"{tblock[0].strftime('%H:%M')}-{tblock[1].strftime('%H:%M')}"
+
+def get_host_by_mac(config, mac):
+    return next((h for h in config.get("known_hosts", []) if h.get("mac") == mac), None)
 
 @app.command()
-def apply():
-    """Checks all host schedules against current time and applies firewall changes."""
-    log_event("INFO", "schedule:apply", "Cron job starting schedule check.", username='SYSTEM')
-    config_path = find_config_file()
-    if not config_path:
-        log_event("ERROR", "schedule:apply", "Configuration file not found.", username='SYSTEM')
-        raise typer.Exit(code=1)
+def list(mac: str = typer.Option(None, help="MAC address (shows all if blank)")):
+    """Show all schedule blocks for one or all hosts."""
+    config = load_config()
+    hosts = config["known_hosts"] if not mac else [get_host_by_mac(config, mac)]
+    for host in hosts:
+        if not host: continue
+        print_t(f"{host.get('description', '(unnamed)')} [{host['mac']}]", "primary")
+        for i, s in enumerate(host.get("schedules", [])):
+            print_t(f"  {i+1}) {s['block']} ({s.get('desc','')})", "success")
+        if not host.get("schedules"):
+            print_t("  No schedules set.", "warning")
 
-    config = load_config(config_path)
-    config_changed = False
-    now = datetime.now()
-    current_day_str = list(VALID_DAYS.keys())[now.weekday()]
-    current_time = now.time()
+@app.command()
+def add(mac: str, block: str = typer.Option(None, help="Time block HH:MM-HH:MM"),
+        desc: str = typer.Option("", help="Optional description")):
+    """Add a schedule block to a host. Prevents overlap."""
+    config = load_config()
+    host = get_host_by_mac(config, mac)
+    if not host:
+        print_t("No such host.", "danger")
+        raise typer.Exit(1)
 
-    for host in config.get("known_hosts", []):
-        schedule = host.get("schedule")
-        if not (schedule and schedule.get("enabled") and current_day_str in schedule.get("days", [])):
+    if not block:
+        block = typer.prompt("Time block (HH:MM-HH:MM)")
+    try:
+        new_block = parse_timeblock(block)
+    except ValueError as e:
+        print_t(str(e), "danger")
+        raise typer.Exit(1)
+
+    # Check overlap
+    for sched in host.get("schedules", []):
+        try:
+            if overlap(new_block, parse_timeblock(sched["block"])):
+                print_t(f"Overlaps with existing block: {sched['block']}", "danger")
+                raise typer.Exit(1)
+        except Exception:
             continue
 
-        is_in_period = is_time_in_range(schedule.get("start_time"), schedule.get("end_time"), current_time)
-        block_during = schedule.get("block_during_schedule", True)
-        should_be_blocked = (is_in_period and block_during) or (not is_in_period and not block_during)
-
-        if host.get("network_access_blocked") != should_be_blocked:
-            hostname = host.get("hostname", host.get("mac"))
-            log_event("INFO", "schedule:apply", f"State change for '{hostname}': setting network_access_blocked to {should_be_blocked}.", username='SYSTEM')
-            host["network_access_blocked"] = should_be_blocked
-            config_changed = True
-
-    if config_changed:
-        log_event("INFO", "schedule:apply", "Configuration updated, invoking firewall sync.", username='SYSTEM')
-        save_config(config, config_path)
-        sync_result = run_command(["./inetctl-runner.py", "shorewall", "sync"])
-        if sync_result["returncode"] != 0:
-            log_event("ERROR", "schedule:apply", f"Firewall sync failed: {sync_result['stderr']}", username='SYSTEM')
-    else:
-        log_event("INFO", "schedule:apply", "No schedule-based changes required.", username='SYSTEM')
-
-@app.command(name="set")
-def set_schedule(
-    mac: str = typer.Argument(..., help="MAC address of host. Can be from a new device with an active lease."),
-    start_time: Optional[str] = typer.Option(None, "--start", help="Schedule start time (HH:MM)."),
-    end_time: Optional[str] = typer.Option(None, "--end", help="Schedule end time (HH:MM)."),
-    days: Optional[str] = typer.Option(None, "--days", help="Comma-separated days (mon,tue,wed,thu,fri,sat,sun)."),
-    block_during: bool = typer.Option(True, "--block-during/--allow-during", help="Block during the schedule vs. allow only during the schedule."),
-    enable: bool = typer.Option(None, "--enable/--disable", help="Enable or disable the schedule."),
-    remove: bool = typer.Option(False, "--remove", help="Remove the schedule from the host entirely."),
-):
-    """Create, update, or remove an access schedule for a host from the CLI."""
-    cli_user = getpass.getuser()
-    config = load_config()
-    mac_lower = mac.lower()
-    host, _ = get_host_by_mac(config, mac_lower)
-
-    if not host:
-        leases_file = config.get("global_settings", {}).get("dnsmasq_leases_file")
-        if not leases_file:
-            typer.echo("Error: dnsmasq_leases_file not defined in config global_settings.", err=True)
-            raise typer.BadParameter("dnsmasq_leases_file not defined in config")
-
-        active_lease = next((l for l in get_active_leases(leases_file) if l['mac'] == mac_lower), None)
-        if not active_lease:
-            raise typer.BadParameter(f"Host {mac_lower} not found in config file or in active leases.")
-
-        networks = config.get("networks", [])
-        lan_net = next((n for n in networks if n.get("purpose") == "lan"), None)
-        host = {
-            "mac": mac_lower, "hostname": active_lease['hostname'],
-            "description": f"Auto-added by {cli_user} on {datetime.now().strftime('%Y-%m-%d')}",
-            "vlan_id": lan_net['id'] if lan_net else (networks[0]['id'] if networks else None),
-            "ip_assignment": {"type": "dhcp"}, "network_access_blocked": False
-        }
-        config.setdefault("known_hosts", []).append(host)
-        config["known_hosts"] = sorted(config["known_hosts"], key=lambda h: h.get('hostname', 'z').lower())
-        log_event("INFO", "cli:schedule:set", f"Host '{active_lease['hostname']}' not found, auto-creating from active lease.", username=cli_user)
-
-    hostname_for_log = host.get("hostname", mac_lower)
-
-    if remove:
-        if "schedule" in host:
-            del host["schedule"]
-            log_event("INFO", "cli:schedule:set", f"Removed schedule from '{hostname_for_log}'.", username=cli_user)
-            typer.echo(f"Successfully removed schedule for host {mac_lower}.")
-        else:
-            typer.echo(f"No schedule found for host {mac_lower}. Nothing to remove.")
-    else:
-        schedule = host.setdefault("schedule", {"enabled": True, "block_during_schedule": True, "days": []})
-        
-        updated_fields = []
-        if start_time is not None:
-            schedule["start_time"] = start_time
-            updated_fields.append(f"start_time to {start_time}")
-        if end_time is not None:
-            schedule["end_time"] = end_time
-            updated_fields.append(f"end_time to {end_time}")
-        if days is not None:
-            schedule["days"] = sorted(list(set(d.strip().lower() for d in days.split(',') if d.strip())), key=lambda d: VALID_DAYS[d])
-            updated_fields.append(f"days to {','.join(schedule['days'])}")
-        if block_during is not None:
-            schedule["block_during_schedule"] = block_during
-            updated_fields.append(f"mode to {'block' if block_during else 'allow'}")
-        if enable is not None:
-            schedule["enabled"] = enable
-            updated_fields.append(f"status to {'enabled' if enable else 'disabled'}")
-        
-        if updated_fields:
-            log_msg = f"Schedule updated for '{hostname_for_log}': set {', '.join(updated_fields)}."
-            log_event("INFO", "cli:schedule:set", log_msg, username=cli_user)
-        
-        typer.echo(typer.style(f"Successfully updated schedule for host {mac_lower}.", fg=typer.colors.GREEN))
-        
+    if "schedules" not in host:
+        host["schedules"] = []
+    host["schedules"].append({"block": block, "desc": desc})
     save_config(config)
+    print_t(f"Added schedule {block} for {mac}.", "success")
+
+@app.command()
+def remove(mac: str):
+    """Remove a schedule block from a host (pick interactively)."""
+    config = load_config()
+    host = get_host_by_mac(config, mac)
+    if not host or not host.get("schedules"):
+        print_t("No such host or no schedules.", "danger")
+        raise typer.Exit(1)
+
+    for i, s in enumerate(host["schedules"]):
+        print_t(f"{i+1}) {s['block']} ({s.get('desc','')})", "primary")
+    idx = typer.prompt("Which to remove?", type=int) - 1
+    if 0 <= idx < len(host["schedules"]):
+        b = host["schedules"].pop(idx)
+        save_config(config)
+        print_t(f"Removed schedule {b['block']}.", "success")
+    else:
+        print_t("Invalid index.", "danger")
+
+@app.command()
+def clear(mac: str):
+    """Remove ALL schedule blocks from a host."""
+    config = load_config()
+    host = get_host_by_mac(config, mac)
+    if not host or not host.get("schedules"):
+        print_t("No such host or no schedules.", "danger")
+        raise typer.Exit(1)
+    host["schedules"] = []
+    save_config(config)
+    print_t(f"Cleared all schedules for {mac}.", "success")
+
+@app.command()
+def interactive():
+    """Menu-driven scheduling management."""
+    config = load_config()
+    macs = [h["mac"] for h in config["known_hosts"]]
+    for i, m in enumerate(macs, 1):
+        print_t(f"{i}) {m}", "primary")
+    idx = typer.prompt("Select host", type=int) - 1
+    mac = macs[idx]
+    while True:
+        print_t(f"1) List 2) Add 3) Remove 4) Clear 5) Back", "info")
+        choice = typer.prompt("Option", type=int)
+        if choice == 1:
+            list(mac)
+        elif choice == 2:
+            add(mac)
+        elif choice == 3:
+            remove(mac)
+        elif choice == 4:
+            clear(mac)
+        elif choice == 5:
+            break
+
+if __name__ == "__main__":
+    app()

@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ APP_TITLE }}</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!--THEME_VARS-->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+    <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
+    <style>
+      /* Add CSS overrides using theme vars */
+      body { background: var(--color-background); color: var(--color-foreground); }
+      nav .profile-dropdown {
+        float: right; position: relative; margin-top: 4px; margin-right: 8px;
+      }
+      nav .profile-dropdown-content {
+        display: none; position: absolute; right: 0; background: var(--color-background); border: 1px solid #555;
+        min-width: 180px; box-shadow: 0 8px 16px rgba(0,0,0,0.25); z-index: 2000; border-radius: var(--border-radius);
+      }
+      nav .profile-dropdown:hover .profile-dropdown-content { display: block; }
+      nav .profile-dropdown-content a {
+        color: var(--color-foreground); padding: 8px 16px; display: block; text-decoration: none;
+      }
+      nav .profile-dropdown-content a:hover {
+        background: var(--color-accent);
+        color: #fff;
+      }
+    </style>
+    <script>
+      function themedToast(msg, type) {
+        let color = getComputedStyle(document.documentElement).getPropertyValue('--color-' + (type || 'info')).trim();
+        Toastify({
+            text: msg,
+            backgroundColor: color,
+            duration: 4000
+        }).showToast();
+      }
+    </script>
+</head>
+<body>
+<nav style="margin-bottom: 2em;">
+    <span style="font-weight: bold; font-size: 1.4em;">{{ APP_TITLE }}</span>
+    <div class="profile-dropdown">
+        <button>
+            <span>&#128100;</span> {{ current_user.username if current_user else "User" }} ▼
+        </button>
+        <div class="profile-dropdown-content">
+            <a href="{{ url_for('profile.profile') }}">Profile</a>
+            <a href="{{ url_for('logout') }}">Logout</a>
+        </div>
+    </div>
+</nav>
+<main class="container">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+            <script>themedToast({{ message|tojson }}, "{{ category }}");</script>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+    {% block content %}{% endblock %}
+</main>
+</body>
+</html>
