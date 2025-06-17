@@ -81,7 +81,7 @@ def init_config(
     )
 ):
     """
-    Creates a new, comprehensive server_config.json file interactively.
+    Creates a new, comprehensive configuration file interactively.
     """
     config_path = Path(find_config_file())
 
@@ -131,7 +131,6 @@ def init_config(
     new_config["system_paths"]["wireguard_config_dir"] = wg_dir
     new_config["wireguard"]["config_dir"] = wg_dir
 
-
     typer.echo("\n--- Pi-hole Integration (Optional) ---")
     if typer.confirm("Do you want to configure Pi-hole integration?"):
         new_config["pihole"]["enabled"] = True
@@ -140,7 +139,7 @@ def init_config(
 
     try:
         config_path.parent.mkdir(parents=True, exist_ok=True)
-        save_config(new_config, config_path=config_path)
+        save_config(new_config)
         typer.echo(
             typer.style(f"\nSuccessfully created comprehensive configuration at {config_path}", fg=typer.colors.GREEN)
         )
@@ -178,3 +177,7 @@ def get_config_value(
     else:
         typer.echo(f"Key '{key}' not found in configuration.", err=True)
         raise typer.Exit(code=1)
+
+
+if __name__ == "__main__":
+    app()
