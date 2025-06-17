@@ -6,7 +6,6 @@ from inetctl.core.config_loader import (
     load_config,
     save_config,
     find_config_file,
-    CONFIG_SEARCH_PATHS,
 )
 
 app = typer.Typer(
