@@ -83,7 +83,7 @@ def init_config(
     """
     Creates a new, comprehensive server_config.json file interactively.
     """
-    config_path = Path(CONFIG_SEARCH_PATHS[-1])
+    config_path = Path(find_config_file())
 
     if config_path.exists() and not force:
         typer.echo(f"Configuration file already exists at {config_path}")
