@@ -22,16 +22,49 @@
         .online { background-color: #43a047; }
         .offline { background-color: #757575; }
         .blocked { background-color: #e53935; }
+<<<<<<< HEAD
         .btn-toggle.allow { background-color: #43a047; color: white; border-radius: 0.3em; border: none; padding: 0.4em 0.9em; cursor: pointer; }
         .btn-toggle.block { background-color: #e53935; color: white; border-radius: 0.3em; border: none; padding: 0.4em 0.9em; cursor: pointer; }
         .mini-transfer-graph { width: 90px; height: 25px; margin-bottom: 0.2em; cursor: pointer; }
         #transfer-modal, #host-edit-modal {
             position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+=======
+        .btn-toggle.allow {
+            background-color: #43a047;
+            color: white;
+            border-radius: 0.3em;
+            border: none;
+            padding: 0.4em 0.9em;
+            cursor: pointer;
+        }
+        .btn-toggle.block {
+            background-color: #e53935;
+            color: white;
+            border-radius: 0.3em;
+            border: none;
+            padding: 0.4em 0.9em;
+            cursor: pointer;
+        }
+        .mini-transfer-graph {
+            width: 90px;
+            height: 25px;
+            margin-bottom: 0.2em;
+            cursor: pointer;
+        }
+        #transfer-modal, #host-edit-modal {
+            position: fixed;
+            top: 0; left: 0; width: 100vw; height: 100vh;
+>>>>>>> a85b0e9f7f401230e182456ff94fa694b4ffbe8d
             background: rgba(0,0,0,0.4);
             display: flex; justify-content: center; align-items: center;
             z-index: 1000;
         }
+<<<<<<< HEAD
         #transfer-modal > div, #host-edit-modal > div {
+=======
+        #transfer-modal > div,
+        #host-edit-modal > div {
+>>>>>>> a85b0e9f7f401230e182456ff94fa694b4ffbe8d
             background: white;
             padding: 2em;
             border-radius: 1em;
@@ -39,13 +72,28 @@
             width: 95vw;
             position: relative;
         }
+<<<<<<< HEAD
         #transfer-modal button.close-modal, #host-edit-modal button.close-modal {
+=======
+        #transfer-modal button.close-modal,
+        #host-edit-modal button.close-modal {
+>>>>>>> a85b0e9f7f401230e182456ff94fa694b4ffbe8d
             position: absolute;
             top: 1em; right: 1em;
             font-size: 1.2em; background: none; border: none; color: #e53935; cursor: pointer;
         }
+<<<<<<< HEAD
         .modal-field { margin-bottom: 0.7em; }
         .octet-input[readonly] { background: #eee; color: #888; }
+=======
+        .modal-field {
+            margin-bottom: 0.7em;
+        }
+        .octet-input[readonly] {
+            background: #eee;
+            color: #888;
+        }
+>>>>>>> a85b0e9f7f401230e182456ff94fa694b4ffbe8d
     </style>
 </head>
 <body>
@@ -54,19 +102,33 @@
         <!-- VLAN Tabs -->
         <nav>
             <ul id="vlan-tabs" style="display:flex; list-style-type:none; padding:0; margin-bottom:1rem;">
+<<<<<<< HEAD
             {% for vlan in vlan_list %}
                 <li style="margin-right:10px;">
                     <button onclick="showTab('{{ vlan.id }}')" id="tab-btn-{{ vlan.id }}" {% if vlan.id == selected_vlan %}class="active"{% endif %}>
                         VLAN {{ vlan.id }}
+=======
+                {% for vlan in vlan_ids %}
+                <li style="margin-right:10px;">
+                    <button onclick="showTab('{{ vlan }}')" id="tab-btn-{{ vlan }}"
+                        class="{% if loop.first %}active{% endif %}">
+                        VLAN {{ vlan }}
+>>>>>>> a85b0e9f7f401230e182456ff94fa694b4ffbe8d
                     </button>
                 </li>
             {% endfor %}
             </ul>
         </nav>
 
+<<<<<<< HEAD
         {% for vlan in vlan_list %}
         <div id="tab-{{ vlan.id }}" class="tab-content" style="{% if vlan.id != selected_vlan %}display:none;{% endif %}">
             <h2>Active Assignments - VLAN {{ vlan.id }}</h2>
+=======
+        {% for vlan in vlan_ids %}
+        <div id="tab-{{ vlan }}" class="tab-content" style="{% if not loop.first %}display:none;{% endif %}">
+            <h2>Active Assignments - VLAN {{ vlan }}</h2>
+>>>>>>> a85b0e9f7f401230e182456ff94fa694b4ffbe8d
             <table>
                 <thead>
                     <tr>
@@ -80,6 +142,7 @@
                     </tr>
                 </thead>
                 <tbody>
+<<<<<<< HEAD
                 {% for host in vlan.active_hosts %}
                     <tr>
                         <td>
@@ -93,21 +156,52 @@
                         <td>
                             <strong>{{ host.hostname or '(unknown)' }}</strong><br>
                             <small>{{ host.description or '(unknown)' }}</small>
+=======
+                    {% for host in active_by_vlan[vlan] %}
+                    <tr>
+                        <td>
+                            <span class="status-dot online"></span>
+                        </td>
+                        <td>
+                            <span class="assignment-badge {{ host.assignment_status|lower }}">
+                                {{ host.assignment_status }}
+                            </span>
+                        </td>
+                        <td>
+                            <strong>{{ host.description or "(unknown)" }}</strong><br>
+                            <small>{{ host.hostname or "(unknown)" }}</small>
+>>>>>>> a85b0e9f7f401230e182456ff94fa694b4ffbe8d
                         </td>
                         <td>
                             <small>{{ host.mac }}<br>{{ host.ip }}</small>
                         </td>
                         <td style="text-align: center;">
+<<<<<<< HEAD
                             {% if host.blocked %}
                               <button class="btn-toggle allow" onclick="toggleAccess('{{ host.mac }}')">Allow</button>
                             {% else %}
                               <button class="btn-toggle block" onclick="toggleAccess('{{ host.mac }}')">Block</button>
+=======
+                            {% if host.network_access_blocked %}
+                            <button class="btn-toggle allow" onclick="toggleAccess('{{ host.mac }}')">Allow</button>
+                            {% else %}
+                            <button class="btn-toggle block" onclick="toggleAccess('{{ host.mac }}')">Block</button>
+>>>>>>> a85b0e9f7f401230e182456ff94fa694b4ffbe8d
                             {% endif %}
                         </td>
                         <td style="text-align:center;">
                             <canvas id="mini-transfer-{{ host.mac|replace(':','') }}" class="mini-transfer-graph"></canvas>
+<<<<<<< HEAD
                             <div id="transfer-rates-{{ host.mac|replace(':','') }}">Loading...</div>
                             <div id="transfer-rates-text-{{ host.mac|replace(':','') }}" style="font-size: 0.95em; color: #444;">&nbsp;</div>
+=======
+                            <div id="transfer-rates-{{ host.mac|replace(':','') }}">
+                                Loading...
+                            </div>
+                            <div id="transfer-rates-text-{{ host.mac|replace(':','') }}" style="font-size: 0.95em; color: #444;">
+                                &nbsp;
+                            </div>
+>>>>>>> a85b0e9f7f401230e182456ff94fa694b4ffbe8d
                         </td>
                         <td style="text-align: right;">
                             <button class="btn-edit" onclick="openEditModal('{{ host.mac }}')">Edit</button>
@@ -127,9 +221,15 @@
                     </tr>
                 </thead>
                 <tbody>
+<<<<<<< HEAD
                 {% for host in vlan.unassigned_reservations %}
+=======
+                    {% for r in unassigned_by_vlan[vlan] %}
+>>>>>>> a85b0e9f7f401230e182456ff94fa694b4ffbe8d
                     <tr>
+                        <td><span class="status-dot offline"></span></td>
                         <td>
+<<<<<<< HEAD
                             <span class="status-dot offline" data-mac-status="{{ host.mac }}"></span>
                         </td>
                         <td>
@@ -141,6 +241,16 @@
                         </td>
                         <td style="text-align: right;">
                             <button class="btn-edit" onclick="openEditModal('{{ host.mac }}')">Edit</button>
+=======
+                            <strong>{{ r.description or "(unknown)" }}</strong><br>
+                            <small>{{ r.hostname or "(unknown)" }}</small>
+                        </td>
+                        <td>
+                            <small>{{ r.mac }}<br>{{ r.ip }}</small>
+                        </td>
+                        <td style="text-align: right;">
+                            <button class="btn-edit" onclick="openEditModal('{{ r.mac }}')">Edit</button>
+>>>>>>> a85b0e9f7f401230e182456ff94fa694b4ffbe8d
                         </td>
                     </tr>
                 {% endfor %}
@@ -160,6 +270,10 @@
             document.getElementById('tab-' + vlan_id).style.display = 'block';
             document.getElementById('tab-btn-' + vlan_id).classList.add('active');
         }
+<<<<<<< HEAD
+=======
+        function editReservation(mac) { openEditModal(mac); }
+>>>>>>> a85b0e9f7f401230e182456ff94fa694b4ffbe8d
 
         // Toggle access logic with job queue and toast notifications
         function toggleAccess(mac) {
@@ -211,10 +325,17 @@
 
         // Transfer mini-graph + modal logic
         document.addEventListener('DOMContentLoaded', function() {
+<<<<<<< HEAD
             {% for vlan in vlan_list %}
                 {% for host in vlan.active_hosts %}
                     loadMiniGraph("{{ host.mac|replace(':','') }}", "{{ host.mac }}");
                 {% endfor %}
+=======
+            {% for vlan in vlan_ids %}
+            {% for host in active_by_vlan[vlan] %}
+                loadMiniGraph("{{ host.mac|replace(':','') }}", "{{ host.mac }}");
+            {% endfor %}
+>>>>>>> a85b0e9f7f401230e182456ff94fa694b4ffbe8d
             {% endfor %}
         });
         function loadMiniGraph(canvasId, mac) {
