@@ -8,7 +8,7 @@ from inetctl.core.config_loader import (
     find_config_file,
 )
 
-app = typer.Typer(
+cli = typer.Typer(
     name="config",
     help="Manage the Linux Network Management Toolbox configuration file.",
     no_args_is_help=True
@@ -16,8 +16,8 @@ app = typer.Typer(
 
 DEFAULT_CONFIG = {
     "global_settings": {
-        "wan_interface": "eth0",
-        "lan_interface": "br0",
+        "wan_interface": "enp1s0",
+        "lan_interface": "enp2s0",
         "database_retention_days": 14
     },
     "system_paths": {
@@ -72,7 +72,7 @@ DEFAULT_CONFIG = {
 }
 
 
-@app.command(name="init")
+@cli.command(name="init")
 def init_config(
     force: bool = typer.Option(
         False,
@@ -107,11 +107,11 @@ def init_config(
 
     new_config["global_settings"]["wan_interface"] = typer.prompt(
         "Enter your primary WAN interface",
-        default="eth0"
+        default="enp1s0"
     )
     new_config["global_settings"]["lan_interface"] = typer.prompt(
         "Enter your primary LAN (or bridge) interface",
-        default="br0"
+        default="enp2s0"
     )
 
     typer.echo("\n--- Path Configuration ---")
@@ -149,7 +149,7 @@ def init_config(
         raise typer.Exit(code=1)
 
 
-@app.command(name="path")
+@cli.command(name="path")
 def show_config_path():
     """
     Shows the path to the currently used configuration file.
@@ -162,7 +162,7 @@ def show_config_path():
         raise typer.Exit(code=1)
 
 
-@app.command(name="get")
+@cli.command(name="get")
 def get_config_value(
     key: str = typer.Argument(..., help="The top-level key to retrieve (e.g., 'global_settings').")
 ):
@@ -180,4 +180,4 @@ def get_config_value(
 
 
 if __name__ == "__main__":
-    app()
+    cli()
