@@ -3,7 +3,7 @@ from flask import Flask, render_template, jsonify, request, redirect, url_for
 from inetctl.core import netplan
 from inetctl.core import dnsmasq
 from inetctl.core import config_loader
-from inetctl.Job_queue_service import JobQueueService
+from inetctl.job_queue_service import JobQueueService
 from datetime import datetime
 
 # Set your site title in one place
