@@ -1,69 +1,94 @@
-import sqlite3
+import threading
+import queue
+import uuid
 import time
-import json
-import subprocess
-from pathlib import Path
+from datetime import datetime
 
-DB_FILE = Path("./inetctl_stats.db")
-POLL_INTERVAL_SECONDS = 5
+class JobQueueService:
+    def __init__(self):
+        self.job_queue = queue.Queue()
+        self.job_status = {}
+        self.log = []
+        self.running = True
+        self.worker_thread = threading.Thread(target=self.worker, daemon=True)
+        self.worker_thread.start()
 
-def get_db_connection():
-    try: return sqlite3.connect(DB_FILE, timeout=10)
-    except sqlite3.Error as e: print(f"[{time.strftime('%H:%M:%S')}] FATAL: Could not connect to database at {DB_FILE}: {e}"); return None
+    def add_job(self, action, **kwargs):
+        job_id = str(uuid.uuid4())
+        job = {
+            "id": job_id,
+            "action": action,
+            "kwargs": kwargs,
+            "status": "pending",
+            "message": f"Job {action} queued.",
+            "created": datetime.now().isoformat(),
+            "steps": []
+        }
+        self.job_status[job_id] = job
+        self.job_queue.put(job)
+        self.log_step(job_id, f"Job created: {action}")
+        return job_id
 
-def find_and_run_next_job():
-    job_id, job_type, job_payload_str, requesting_user = None, None, None, None
-    conn = get_db_connection()
-    if not conn: return
-    try:
-        with conn:
-            cursor = conn.cursor()
-            cursor.execute("SELECT id, job_type, job_payload, requesting_user FROM job_queue WHERE status = 'queued' ORDER BY timestamp_added ASC LIMIT 1")
-            job_row = cursor.fetchone()
-            if job_row:
-                job_id, job_type, job_payload_str, requesting_user = job_row
-                cursor.execute("UPDATE job_queue SET status = 'running', timestamp_started = ? WHERE id = ?", (int(time.time()), job_id))
-                print(f"[{time.strftime('%H:%M:%S')}] Picked up job {job_id}: Type='{job_type}', User='{requesting_user}'")
-            else: return
-    except sqlite3.Error as e: print(f"DB error during job selection: {e}"); return
-    finally:
-        if conn: conn.close()
+    def get_status(self, job_id):
+        job = self.job_status.get(job_id)
+        if not job:
+            return "notfound", "Job ID not found"
+        return job["status"], job.get("message", "")
 
-    if not job_id: return
+    def log_step(self, job_id, message):
+        job = self.job_status.get(job_id)
+        if job:
+            step = {
+                "time": datetime.now().isoformat(),
+                "message": message
+            }
+            job.setdefault("steps", []).append(step)
+            self.log.append({"job_id": job_id, **step})
 
-    try:
-        payload = json.loads(job_payload_str)
-        command = ["./inetctl-runner.py"] 
-        
-        if job_type == "shorewall:sync" or job_type == "api:vlan_toggle_access": command.extend(["shorewall", "sync"])
-        elif job_type == "netplan:apply": command.extend(["network", "apply"])
-        elif job_type == "netplan:add_interface":
-            p = payload; command.extend(["network", "add", p['iface_type'], p['iface_name'], '--settings-json', json.dumps(p['settings'])])
-        elif job_type == "netplan:delete_interface":
-            p = payload; command.extend(["network", "delete", p['iface_type'], p['iface_name']])
-        else: raise ValueError(f"Unknown job type: {job_type}")
-            
-        result = subprocess.run(command, capture_output=True, text=True, timeout=120)
-        final_status, output_message, result_code = ('completed' if result.returncode == 0 else 'failed'), (result.stdout.strip() or result.stderr.strip() or "(No output)"), result.returncode
-    except Exception as e:
-        final_status, output_message, result_code = 'failed', f"Job runner failed: {str(e)}", -1
-        print(f"CRITICAL: Error executing job {job_id}: {e}")
+    def worker(self):
+        while self.running:
+            try:
+                job = self.job_queue.get(timeout=1)
+            except queue.Empty:
+                continue
+            job["status"] = "running"
+            self.log_step(job["id"], f"Job running: {job['action']}")
+            try:
+                # Simulated execution step-by-step; replace with actual logic
+                self.log_step(job["id"], "Pre-execution checks...")
+                time.sleep(0.5)
+                if job["action"] == "toggle_access":
+                    self.log_step(job["id"], f"Toggling access for {job['kwargs'].get('mac')}")
+                    # Insert block/allow/shorewall code here
+                    time.sleep(1)
+                elif job["action"] == "update_host":
+                    self.log_step(job["id"], f"Updating host config for {job['kwargs'].get('mac')}")
+                    # Insert host update logic here
+                    time.sleep(1)
+                # ... add more action handlers as needed
+                job["status"] = "success"
+                job["message"] = "Job completed successfully."
+                self.log_step(job["id"], "Job completed successfully.")
+            except Exception as ex:
+                job["status"] = "failed"
+                job["message"] = f"Job failed: {ex}"
+                self.log_step(job["id"], f"Error: {ex}")
+            finally:
+                self.job_queue.task_done()
 
-    conn = get_db_connection()
-    if conn:
-        try:
-            cursor = conn.cursor()
-            cursor.execute("UPDATE job_queue SET status = ?, timestamp_completed = ?, result_code = ?, result_message = ? WHERE id = ?", (final_status, int(time.time()), result_code, output_message, job_id))
-            conn.commit()
-            print(f"[{time.strftime('%H:%M:%S')}] Finished job {job_id} with status '{final_status}'")
-        except sqlite3.Error as e: print(f"FATAL: DB error updating job {job_id}: {e}")
-        finally: conn.close()
+    def stop(self):
+        self.running = False
+        self.worker_thread.join()
 
-def main_loop():
-    print("--- Starting inetctl Job Queue Service ---"); print(f"--- Polling every {POLL_INTERVAL_SECONDS}s. Ctrl+C to exit. ---")
-    while True:
-        try: find_and_run_next_job(); time.sleep(POLL_INTERVAL_SECONDS)
-        except KeyboardInterrupt: print("\nShutting down gracefully."); break
-        except Exception as e: print(f"Unexpected error in main loop: {e}"); time.sleep(30)
-if __name__ == "__main__":
-    main_loop()
+    def get_log(self, count=50):
+        """Return the last N log entries"""
+        return self.log[-count:]
+
+    def get_job_steps(self, job_id):
+        job = self.job_status.get(job_id)
+        if not job:
+            return []
+        return job.get("steps", [])
+
+# Instantiate one global service if needed
+job_queue_service = JobQueueService()

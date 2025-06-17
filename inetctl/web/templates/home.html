@@ -1,11 +1,13 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Linux Network Management Toolbox</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ app_title }}</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css" />
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
-    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css" />
+    <script src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
     <style>
         :root { --pico-font-size: 14px; --pico-grid-spacing-horizontal: 1.5rem; }
         body { padding-bottom: 5em; }
@@ -14,103 +16,57 @@
             color: white;
             border-radius: 0.5em;
         }
-        .assignment-badge.reservation {
-            background-color: #007bff;
-            color: white;
-            padding: 0.2em 0.5em;
-            border-radius: 0.3em;
-        }
-        .assignment-badge.dynamic {
-            background-color: #ff9800;
-            color: white;
-            padding: 0.2em 0.5em;
-            border-radius: 0.3em;
-        }
+        .assignment-badge.reservation { background-color: #007bff; color: white; padding: 0.2em 0.5em; border-radius: 0.3em; }
+        .assignment-badge.dynamic { background-color: #ff9800; color: white; padding: 0.2em 0.5em; border-radius: 0.3em; }
         .status-dot { height: 10px; width: 10px; border-radius: 50%; display: inline-block; vertical-align: middle; margin-right: 0.5rem; }
         .online { background-color: #43a047; }
         .offline { background-color: #757575; }
         .blocked { background-color: #e53935; }
-        .btn-toggle.allow {
-            background-color: #43a047;
-            color: white;
-            border-radius: 0.3em;
-            border: none;
-            padding: 0.4em 0.9em;
-            cursor: pointer;
-        }
-        .btn-toggle.block {
-            background-color: #e53935;
-            color: white;
-            border-radius: 0.3em;
-            border: none;
-            padding: 0.4em 0.9em;
-            cursor: pointer;
-        }
-        .mini-transfer-graph {
-            width: 90px;
-            height: 25px;
-            margin-bottom: 0.2em;
-            cursor: pointer;
-        }
-        /* Modal for transfer graph */
-        #transfer-modal {
-            position: fixed;
-            top: 0; left: 0; width: 100vw; height: 100vh;
+        .btn-toggle.allow { background-color: #43a047; color: white; border-radius: 0.3em; border: none; padding: 0.4em 0.9em; cursor: pointer; }
+        .btn-toggle.block { background-color: #e53935; color: white; border-radius: 0.3em; border: none; padding: 0.4em 0.9em; cursor: pointer; }
+        .mini-transfer-graph { width: 90px; height: 25px; margin-bottom: 0.2em; cursor: pointer; }
+        #transfer-modal, #host-edit-modal {
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
             background: rgba(0,0,0,0.4);
             display: flex; justify-content: center; align-items: center;
             z-index: 1000;
         }
-        #transfer-modal > div {
+        #transfer-modal > div, #host-edit-modal > div {
             background: white;
             padding: 2em;
             border-radius: 1em;
-            max-width: 800px;
+            max-width: 480px;
             width: 95vw;
             position: relative;
         }
-        #transfer-modal button.close-modal {
+        #transfer-modal button.close-modal, #host-edit-modal button.close-modal {
             position: absolute;
-            top: 1em;
-            right: 1em;
-            font-size: 1.2em;
-            background: none;
-            border: none;
-            color: #e53935;
-            cursor: pointer;
+            top: 1em; right: 1em;
+            font-size: 1.2em; background: none; border: none; color: #e53935; cursor: pointer;
         }
+        .modal-field { margin-bottom: 0.7em; }
+        .octet-input[readonly] { background: #eee; color: #888; }
     </style>
 </head>
 <body>
     <main class="container">
-        <h1>Linux Network Management Toolbox</h1>
+        <h1>{{ app_title }}</h1>
         <!-- VLAN Tabs -->
         <nav>
             <ul id="vlan-tabs" style="display:flex; list-style-type:none; padding:0; margin-bottom:1rem;">
-                {% for vlan_id in vlan_ids %}
+            {% for vlan in vlan_list %}
                 <li style="margin-right:10px;">
-                    <button onclick="showTab('{{ vlan_id }}')" id="tab-btn-{{ vlan_id }}"
-                        {% if loop.first %}class="active"{% endif %}>
-                        {% if vlan_id == 'unassigned' %}
-                            {{ network_map.get(vlan_id, 'LAN') }}
-                        {% else %}
-                            VLAN {{ network_map.get(vlan_id, vlan_id) }}
-                        {% endif %}
+                    <button onclick="showTab('{{ vlan.id }}')" id="tab-btn-{{ vlan.id }}" {% if vlan.id == selected_vlan %}class="active"{% endif %}>
+                        VLAN {{ vlan.id }}
                     </button>
                 </li>
-                {% endfor %}
+            {% endfor %}
             </ul>
         </nav>
 
-        {% for vlan_id in vlan_ids %}
-        <div id="tab-{{ vlan_id }}" class="tab-content" style="{% if not loop.first %}display:none;{% endif %}">
-            <!-- Main Table: Active Devices/Assignments (including active reserved) -->
-            <h2>Active Assignments - 
-                {% if vlan_id == 'unassigned' %}
-                    {{ network_map.get(vlan_id, 'LAN') }}
-                {% else %}
-                    VLAN {{ network_map.get(vlan_id, vlan_id) }}
-                {% endif %}
-            </h2>
+        {% for vlan in vlan_list %}
+        <div id="tab-{{ vlan.id }}" class="tab-content" style="{% if vlan.id != selected_vlan %}display:none;{% endif %}">
+            <h2>Active Assignments - VLAN {{ vlan.id }}</h2>
             <table>
                 <thead>
                     <tr>
@@ -124,43 +80,42 @@
                     </tr>
                 </thead>
                 <tbody>
-                    {% for device in active_by_vlan.get(vlan_id, []) %}
+                {% for host in vlan.active_hosts %}
                     <tr>
                         <td>
-                            <span class="status-dot {{ 'blocked' if device.network_access_blocked else ('online' if device.is_online else 'offline') }}" data-mac-status="{{ device.mac }}"></span>
+                            <span class="status-dot {{ host.status }}" data-mac-status="{{ host.mac }}"></span>
                         </td>
                         <td>
-                            <span class="assignment-badge {{ device.assignment_status|lower }}">
-                                {{ device.assignment_status == "Reservation" and "Reservation" or "Dynamic" }}
+                            <span class="assignment-badge {{ host.assignment_type|lower }}">
+                                {{ host.assignment_type }}
                             </span>
                         </td>
                         <td>
-                            <strong>{{ device.description }}</strong><br>
-                            <small>{{ device.hostname }}</small>
+                            <strong>{{ host.hostname or '(unknown)' }}</strong><br>
+                            <small>{{ host.description or '(unknown)' }}</small>
                         </td>
                         <td>
-                            <small>{{ device.mac }}<br>{{ device.ip or 'N/A' }}</small>
+                            <small>{{ host.mac }}<br>{{ host.ip }}</small>
                         </td>
                         <td style="text-align: center;">
-                            {% if device.network_access_blocked %}
-                              <button class="btn-toggle allow" onclick="toggleAccess('{{ device.mac }}')">Allow</button>
+                            {% if host.blocked %}
+                              <button class="btn-toggle allow" onclick="toggleAccess('{{ host.mac }}')">Allow</button>
                             {% else %}
-                              <button class="btn-toggle block" onclick="toggleAccess('{{ device.mac }}')">Block</button>
+                              <button class="btn-toggle block" onclick="toggleAccess('{{ host.mac }}')">Block</button>
                             {% endif %}
                         </td>
                         <td style="text-align:center;">
-                            <canvas id="mini-transfer-{{ device.mac|replace(':','') }}" class="mini-transfer-graph"></canvas>
-                            <div id="transfer-rates-{{ device.mac|replace(':','') }}">Loading...</div>
+                            <canvas id="mini-transfer-{{ host.mac|replace(':','') }}" class="mini-transfer-graph"></canvas>
+                            <div id="transfer-rates-{{ host.mac|replace(':','') }}">Loading...</div>
+                            <div id="transfer-rates-text-{{ host.mac|replace(':','') }}" style="font-size: 0.95em; color: #444;">&nbsp;</div>
                         </td>
                         <td style="text-align: right;">
-                            <button class="btn-edit" onclick="editReservation('{{ device.mac }}')">Edit</button>
+                            <button class="btn-edit" onclick="openEditModal('{{ host.mac }}')">Edit</button>
                         </td>
                     </tr>
-                    {% endfor %}
+                {% endfor %}
                 </tbody>
             </table>
-
-            <!-- "Other Reservations" Table: Unassigned Reservations (per VLAN) -->
             <h3>Other Reservations</h3>
             <table>
                 <thead>
@@ -172,31 +127,30 @@
                     </tr>
                 </thead>
                 <tbody>
-                    {% for reservation in unassigned_by_vlan.get(vlan_id, []) %}
+                {% for host in vlan.unassigned_reservations %}
                     <tr>
                         <td>
-                            <span class="assignment-badge reservation">Reservation</span>
+                            <span class="status-dot offline" data-mac-status="{{ host.mac }}"></span>
                         </td>
                         <td>
-                            <strong>{{ reservation.description }}</strong><br>
-                            <small>{{ reservation.hostname }}</small>
+                            <strong>{{ host.hostname or '(unknown)' }}</strong><br>
+                            <small>{{ host.description or '(unknown)' }}</small>
                         </td>
                         <td>
-                            <small>{{ reservation.mac }}<br>{{ reservation.ip or 'N/A' }}</small>
+                            <small>{{ host.mac }}<br>{{ host.ip or '-' }}</small>
                         </td>
                         <td style="text-align: right;">
-                            <button class="btn-edit" onclick="editReservation('{{ reservation.mac }}')">Edit</button>
+                            <button class="btn-edit" onclick="openEditModal('{{ host.mac }}')">Edit</button>
                         </td>
                     </tr>
-                    {% endfor %}
+                {% endfor %}
                 </tbody>
             </table>
         </div>
         {% endfor %}
 
-        <!-- Modal container for expanded transfer graph -->
         <div id="transfer-modal-root"></div>
-
+        <div id="host-edit-modal-root"></div>
     </main>
     <script>
         // VLAN tab logic
@@ -205,9 +159,6 @@
             document.querySelectorAll('#vlan-tabs button').forEach(btn => btn.classList.remove('active'));
             document.getElementById('tab-' + vlan_id).style.display = 'block';
             document.getElementById('tab-btn-' + vlan_id).classList.add('active');
-        }
-        function editReservation(mac) {
-            window.location.href = '/edit_reservation/' + mac;
         }
 
         // Toggle access logic with job queue and toast notifications
@@ -260,25 +211,23 @@
 
         // Transfer mini-graph + modal logic
         document.addEventListener('DOMContentLoaded', function() {
-            {% for vlan_id in vlan_ids %}
-                {% for device in active_by_vlan.get(vlan_id, []) %}
-                    loadMiniGraph("{{ device.mac|replace(':','') }}", "{{ device.mac }}");
+            {% for vlan in vlan_list %}
+                {% for host in vlan.active_hosts %}
+                    loadMiniGraph("{{ host.mac|replace(':','') }}", "{{ host.mac }}");
                 {% endfor %}
             {% endfor %}
         });
-
         function loadMiniGraph(canvasId, mac) {
             fetch(`/api/transfer/${mac}?hours=1`)
             .then(response => response.json())
             .then(data => {
                 const ctx = document.getElementById("mini-transfer-" + canvasId).getContext('2d');
-                const times = data.map(d => new Date(d.timestamp*1000).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}));
                 const rx = data.map(d => d.rx / 1024); // KB/s
                 const tx = data.map(d => d.tx / 1024);
                 new Chart(ctx, {
                     type: 'line',
                     data: {
-                        labels: times,
+                        labels: data.map(d => new Date(d.timestamp*1000).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})),
                         datasets: [
                             { data: rx, borderColor: "#007bff", fill: false, pointRadius: 0, borderWidth: 1.2 },
                             { data: tx, borderColor: "#43a047", fill: false, pointRadius: 0, borderWidth: 1.2 }
@@ -294,18 +243,26 @@
                 });
                 if (data.length > 0) {
                     const last = data[data.length-1];
+                    const rxText = (last.rx / 1024).toFixed(1);
+                    const txText = (last.tx / 1024).toFixed(1);
                     document.getElementById("transfer-rates-" + canvasId).textContent =
-                        `⬇ ${(last.rx/1024).toFixed(1)} KB/s ⬆ ${(last.tx/1024).toFixed(1)} KB/s`;
+                        `⬇ ${rxText} KB/s ⬆ ${txText} KB/s`;
+                    document.getElementById("transfer-rates-text-" + canvasId).textContent =
+                        `Download: ${rxText} KB/s, Upload: ${txText} KB/s`;
                 } else {
                     document.getElementById("transfer-rates-" + canvasId).textContent = "No data";
+                    document.getElementById("transfer-rates-text-" + canvasId).textContent = "";
                 }
                 document.getElementById("mini-transfer-" + canvasId).style.cursor = "pointer";
                 document.getElementById("mini-transfer-" + canvasId).onclick = function() {
                     openTransferModal(mac);
                 };
+            })
+            .catch(() => {
+                document.getElementById("transfer-rates-" + canvasId).textContent = "No data";
+                document.getElementById("transfer-rates-text-" + canvasId).textContent = "";
             });
         }
-
         function openTransferModal(mac) {
             let modalRoot = document.getElementById("transfer-modal-root");
             modalRoot.innerHTML = `
@@ -329,7 +286,6 @@
             };
             loadLargeGraph(mac, 1);
         }
-
         function loadLargeGraph(mac, hours) {
             fetch(`/api/transfer/${mac}?hours=${hours}`)
             .then(response => response.json())
@@ -364,6 +320,104 @@
                     document.getElementById("current-transfer").textContent = "No data";
                 }
             });
+        }
+
+        // -------- Host Edit Modal logic --------
+        function openEditModal(mac) {
+            fetch(`/api/host/${mac}`)
+            .then(resp => resp.json())
+            .then(data => {
+                let octets = data.ip.split('.');
+                let mask = data.subnet.split('.').map(Number);
+                let locked = mask.map(x => x === 255);
+                let ipFields = octets.map((octet, i) =>
+                    locked[i]
+                        ? `<input value="${octet}" readonly style="width:40px; margin-right:2px;" class="octet-input" tabindex="-1">`
+                        : `<input id="octet-${i}" value="${octet}" style="width:40px; margin-right:2px;" class="octet-input">`
+                ).join('');
+                let profiles = ['Default', 'VoIP Priority', 'Streaming', 'Gaming', 'Custom'];
+                let profileOptions = profiles.map(p =>
+                    `<option value="${p}"${p === data.qos_profile ? ' selected' : ''}>${p}</option>`
+                ).join('');
+                let modal = document.getElementById("host-edit-modal-root");
+                modal.innerHTML = `
+                <div id="host-edit-modal">
+                    <div>
+                        <button class="close-modal" onclick="closeEditModal()">✖</button>
+                        <h3>Edit Host (${data.mac})</h3>
+                        <div class="modal-field">
+                            <label>Hostname/Description:</label>
+                            <input id="edit-desc" value="${data.description || ''}">
+                        </div>
+                        <div class="modal-field">
+                            <label>DHCP Reservation:</label>
+                            <div>${ipFields}</div>
+                            <div style="font-size: 0.85em; color: #888;">
+                                Editable fields correspond to your subnet size.
+                            </div>
+                        </div>
+                        <div class="modal-field">
+                            <label>QoS Profile:</label>
+                            <select id="qos-profile" onchange="toggleCustomQoS()">${profileOptions}</select>
+                            <div id="custom-qos-fields" style="display:${data.qos_profile === 'Custom' ? 'block':'none'}">
+                                <label>Download (Mbps): <input id="qos-dl" type="number" min="1" max="10000" value="${data.qos_dl || ''}"></label>
+                                <label>Upload (Mbps): <input id="qos-ul" type="number" min="1" max="10000" value="${data.qos_ul || ''}"></label>
+                            </div>
+                        </div>
+                        <div class="modal-field">
+                            <label>Schedule Blacklist (offline):</label>
+                            <input id="edit-schedule" type="text" value="${data.schedule || ''}" placeholder="e.g., 22:00-06:00">
+                            <div style="font-size: 0.85em; color: #888;">Time range when this host will be offline (24h format).</div>
+                        </div>
+                        <div style="margin-top:1em; text-align:right;">
+                            <button onclick="closeEditModal()">Cancel</button>
+                            <button onclick="saveHost('${mac}')">Save</button>
+                        </div>
+                    </div>
+                </div>
+                `;
+                document.body.style.overflow = "hidden";
+            });
+        }
+        function closeEditModal() {
+            document.getElementById("host-edit-modal-root").innerHTML = "";
+            document.body.style.overflow = "";
+        }
+        function toggleCustomQoS() {
+            var prof = document.getElementById("qos-profile").value;
+            document.getElementById("custom-qos-fields").style.display = prof === "Custom" ? "block" : "none";
+        }
+        function saveHost(mac) {
+            // Collect edited data
+            let ip = [];
+            for (let i = 0; i < 4; i++) {
+                let field = document.getElementById('octet-' + i);
+                ip.push(field ? field.value : document.querySelector(`input[readonly][tabindex="-1"]`).value);
+            }
+            let payload = {
+                mac: mac,
+                description: document.getElementById('edit-desc').value,
+                ip: ip.join('.'),
+                qos_profile: document.getElementById('qos-profile').value,
+                qos_dl: document.getElementById('qos-dl') ? document.getElementById('qos-dl').value : "",
+                qos_ul: document.getElementById('qos-ul') ? document.getElementById('qos-ul').value : "",
+                schedule: document.getElementById('edit-schedule').value
+            };
+            fetch(`/api/host/${mac}`, {
+                method: "POST",
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(payload)
+            })
+            .then(resp => resp.json())
+            .then(data => {
+                Toastify({
+                    text: data.success ? "Host updated!" : "Error saving host.",
+                    backgroundColor: data.success ? "#43a047" : "#e53935",
+                    duration: 4000
+                }).showToast();
+                if (data.success) setTimeout(() => window.location.reload(), 1000);
+            });
+            closeEditModal();
         }
     </script>
 </body>
