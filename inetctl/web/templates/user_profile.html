@@ -1,0 +1,25 @@
+<!-- templates/user_profile.html -->
+{% extends "base.html" %}
+{% block content %}
+<h2>User Profile</h2>
+<form method="post" autocomplete="off">
+  <label>Email:
+    <input type="email" name="email" value="{{ profile.email }}">
+  </label>
+  <label>Theme:
+    <select name="theme">
+      {% for t_key, t_name in themes.items() %}
+        <option value="{{ t_key }}" {% if t_key == profile.theme %}selected{% endif %}>{{ t_name }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <fieldset>
+    <legend>Notifications</legend>
+    <label><input type="checkbox" name="notif_system" {% if profile.notification_options.system %}checked{% endif %}> System</label>
+    <label><input type="checkbox" name="notif_jobs" {% if profile.notification_options.jobs %}checked{% endif %}> Jobs</label>
+    <label><input type="checkbox" name="notif_warnings" {% if profile.notification_options.warnings %}checked{% endif %}> Warnings</label>
+    <label><input type="checkbox" name="notif_critical" {% if profile.notification_options.critical %}checked{% endif %}> Critical</label>
+  </fieldset>
+  <button type="submit">Save Profile</button>
+</form>
+{% endblock %}

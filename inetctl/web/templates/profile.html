@@ -1,18 +1,49 @@
-{% extends "base.html" %}
-{% block content %}
-<h2>User Profile</h2>
-<form method="post" autocomplete="off">
-    <label>Email:
-        <input type="email" name="email" value="{{ user.email or '' }}">
-    </label>
-    <label>Theme:
-        <select name="theme">
-            {% for key, name in themes.items() %}
-            <option value="{{ key }}" {% if key == current_theme %}selected{% endif %}>{{ name }}</option>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>User Profile - Linux Network Management Toolbox</title>
+    <!--THEME_VARS-->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+</head>
+<body>
+<main class="container">
+    <h1>User Profile</h1>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <div class="alert {{category}}">{{ message }}</div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+    <form method="POST">
+        <label for="email">Email Address</label>
+        <input name="email" id="email" value="{{ user.email or '' }}" type="email" placeholder="your@email.com">
+        
+        <label for="theme">Theme</label>
+        <select name="theme" id="theme">
+            {% for key, theme in all_themes.items() %}
+            <option value="{{key}}" {% if user.theme == key %}selected{% endif %}>{{ theme['name'] }}</option>
             {% endfor %}
         </select>
-    </label>
-    <!-- More notification/option settings can go here -->
-    <button type="submit">Save</button>
-</form>
-{% endblock %}
+
+        <label for="notify_events">Notification Preferences</label>
+        <div>
+            {% for value, label in event_options %}
+            <label style="margin-right: 1em;">
+                <input type="checkbox" name="notify_events" value="{{value}}" {% if value in (user.notify_events or []) %}checked{% endif %}>
+                {{ label }}
+            </label>
+            {% endfor %}
+        </div>
+
+        <button type="submit">Update Profile</button>
+    </form>
+
+    <hr>
+    <h3>Password Change</h3>
+    <p>
+        To change your password, please use the system's <code>passwd</code> command, or contact your administrator. For security reasons, password changes are handled through the OS (PAM authentication).
+    </p>
+</main>
+</body>
+</html>

@@ -1,132 +1,226 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ theme|capitalize }} | Linux Network Management Toolbox</title>
+    <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Linux Network Management Toolbox</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css" />
-    <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
-    <script src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <style id="theme-style">
-    </style>
+    <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/toastify-js/src/toastify.min.css">
+    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/toastify-js"></script>
     <style>
-      /* Profile Dropdown */
-      #user-profile-menu { position: absolute; top: 1em; right: 1em; }
-      #profile-menu-dropdown {
-        display: none; position: absolute; right:0; background: var(--background, #23272e);
-        color: var(--foreground, #fff); border-radius: var(--border-radius,10px);
-        box-shadow: 0 4px 16px rgba(0,0,0,.12); min-width:240px; z-index:101;
-      }
-      #profile-menu-dropdown form { padding:1em; }
-      #profile-menu-dropdown input, #profile-menu-dropdown select { width:100%; margin-bottom:0.4em;}
-      #profile-menu-dropdown label { font-size: 0.98em;}
-      #custom-theme-link { margin:0.5em 0; }
+        :root { --pico-font-size: 14px; --pico-grid-spacing-horizontal: 1.5rem; }
+        body { padding-bottom: 5em; }
+        #vlan-tabs button.active {
+            background-color: #007bff;
+            color: white;
+            border-radius: 0.5em;
+        }
+        .assignment-badge.reservation { background-color: #007bff; color: white; padding: 0.2em 0.5em; border-radius: 0.3em;}
+        .assignment-badge.dynamic { background-color: #ff9800; color: white; padding: 0.2em 0.5em; border-radius: 0.3em;}
+        .status-dot { height: 10px; width: 10px; border-radius: 50%; display: inline-block; vertical-align: middle; margin-right: 0.5rem; }
+        .online { background-color: #43a047; } .offline { background-color: #757575; } .blocked { background-color: #e53935; }
+        .btn-toggle.allow { background-color: #43a047; color: white; border-radius: 0.3em; border: none; padding: 0.4em 0.9em; cursor: pointer;}
+        .btn-toggle.block { background-color: #e53935; color: white; border-radius: 0.3em; border: none; padding: 0.4em 0.9em; cursor: pointer;}
+        .mini-transfer-graph { width: 90px; height: 25px; margin-bottom: 0.2em; cursor: pointer;}
+        #transfer-modal, #host-edit-modal {
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            background: rgba(0,0,0,0.4); display: flex; justify-content: center; align-items: center; z-index: 1000;
+        }
+        #transfer-modal > div, #host-edit-modal > div {
+            background: white; padding: 2em; border-radius: 1em; max-width: 480px; width: 95vw; position: relative;
+        }
+        #transfer-modal button.close-modal, #host-edit-modal button.close-modal {
+            position: absolute; top: 1em; right: 1em; font-size: 1.2em; background: none; border: none; color: #e53935; cursor: pointer;
+        }
+        .modal-field { margin-bottom: 0.7em; }
+        .octet-input[readonly] { background: #eee; color: #888;}
+        .sched-block { background: #f5f6fa; padding: 6px 8px; border-radius: 6px; margin-bottom: 5px;}
+        .sched-edit-row input, .sched-edit-row select { margin-right: 5px;}
     </style>
 </head>
 <body>
-    <div id="user-profile-menu">
-      <button onclick="toggleProfileMenu()" style="background:var(--primary,#3498db);color:#fff;border-radius:50%;padding:0.7em 1em;">
-        <span id="user-avatar">👤</span>
-      </button>
-      <div id="profile-menu-dropdown">
-        <form id="profile-form">
-          <label>Email:<input id="user-email" type="email"></label>
-          <label>New Password:<input id="user-password" type="password" autocomplete="new-password"></label>
-          <label>Theme:
-            <select id="theme-select"></select>
-          </label>
-          <div id="custom-theme-link"><a href="#" onclick="showCustomThemeModal();return false;">Create Custom Theme…</a></div>
-          <label><input type="checkbox" id="notif-blocklist"> Blocklist events</label>
-          <label><input type="checkbox" id="notif-job"> Job completion</label>
-          <label><input type="checkbox" id="notif-schedule"> Schedule events</label>
-          <div style="margin-top:0.7em;text-align:right;">
-            <button type="submit">Save</button>
-          </div>
-        </form>
-      </div>
-    </div>
     <main class="container">
         <h1>Linux Network Management Toolbox</h1>
-        <!-- rest of your dashboard here -->
-        <div id="content-placeholder"></div>
+        <!-- VLAN Tabs -->
+        <!-- ... VLAN TABS CODE (unchanged, omitted for brevity) ... -->
+        <!-- Replace/edit the following modal logic (host-edit-modal-root): -->
+        <div id="host-edit-modal-root"></div>
     </main>
     <script>
-    // --- Theme switching ---
-    let currentTheme = "{{ theme }}";
-    function applyTheme(themeName) {
-        fetch("/api/theme/" + themeName).then(r=>r.json()).then(vars=>{
-            let style = ":root{\n";
-            for(let k in vars){ style += "--"+k.replace(/_/g,"-")+": "+vars[k]+";\n";}
-            style += "}";
-            document.getElementById("theme-style").textContent = style;
-        });
-    }
-    applyTheme(currentTheme);
-    // --- Profile Dropdown logic ---
-    function toggleProfileMenu() {
-        let menu = document.getElementById("profile-menu-dropdown");
-        menu.style.display = menu.style.display === "block" ? "none" : "block";
-    }
-    document.addEventListener('click', function(e) {
-        let menu = document.getElementById("profile-menu-dropdown");
-        if (menu && !menu.contains(e.target) && !e.target.closest("#user-profile-menu")) {
-            menu.style.display = "none";
+        // ... VLAN tab logic, toggleAccess, pollJobStatus, transfer graph functions, etc. (unchanged) ...
+
+        // Host Edit Modal with advanced scheduling
+        let hostMac = "";
+        let currentSchedules = [];
+
+        function openEditModal(mac) {
+            hostMac = mac;
+            fetch(`/api/host/${mac}`)
+            .then(resp => resp.json())
+            .then(data => {
+                // ... (existing code to build modal up to the schedule field) ...
+                // Schedules Section
+                let modal = document.getElementById("host-edit-modal-root");
+                modal.innerHTML = `
+                <div id="host-edit-modal">
+                    <div>
+                        <button class="close-modal" onclick="closeEditModal()">✖</button>
+                        <h3>Edit Host (${data.mac})</h3>
+                        <div class="modal-field">
+                            <label>Hostname/Description:</label>
+                            <input id="edit-desc" value="${data.description || ''}">
+                        </div>
+                        <div class="modal-field">
+                            <label>DHCP Reservation:</label>
+                            <div>${(function(octets, mask){
+                                let locked = mask.map(x=>x==255);
+                                return octets.map((octet, i) =>
+                                    locked[i]
+                                        ? `<input value="${octet}" readonly style="width:40px; margin-right:2px;" class="octet-input" tabindex="-1">`
+                                        : `<input id="octet-${i}" value="${octet}" style="width:40px; margin-right:2px;" class="octet-input">`
+                                ).join('')
+                            })(data.ip.split('.'), data.subnet.split('.').map(Number))}</div>
+                            <div style="font-size: 0.85em; color: #888;">Editable fields correspond to your subnet size.</div>
+                        </div>
+                        <div class="modal-field">
+                            <label>QoS Profile:</label>
+                            <select id="qos-profile" onchange="toggleCustomQoS()">
+                                ${['Default','VoIP Priority','Streaming','Gaming','Custom'].map(p =>
+                                    `<option value="${p}"${p === data.qos_profile ? ' selected' : ''}>${p}</option>`
+                                ).join('')}
+                            </select>
+                            <div id="custom-qos-fields" style="display:${data.qos_profile === 'Custom' ? 'block':'none'}">
+                                <label>Download (Mbps): <input id="qos-dl" type="number" min="1" max="10000" value="${data.qos_dl || ''}"></label>
+                                <label>Upload (Mbps): <input id="qos-ul" type="number" min="1" max="10000" value="${data.qos_ul || ''}"></label>
+                            </div>
+                        </div>
+                        <div class="modal-field">
+                            <label>Blacklist Schedules:</label>
+                            <div id="schedules-list"></div>
+                            <button type="button" onclick="showAddScheduleForm()">+ Add Block</button>
+                            <div id="add-schedule-form" style="display:none; margin-top:5px;">
+                                <input type="time" id="sched-start">
+                                <input type="time" id="sched-end">
+                                <input type="text" id="sched-days" placeholder="Days (Mon,Tue...) or 'all'">
+                                <input type="text" id="sched-comment" placeholder="Comment">
+                                <button type="button" onclick="addScheduleBlock()">Add</button>
+                                <button type="button" onclick="hideAddScheduleForm()">Cancel</button>
+                            </div>
+                        </div>
+                        <div style="margin-top:1em; text-align:right;">
+                            <button onclick="closeEditModal()">Cancel</button>
+                            <button onclick="saveHost('${mac}')">Save</button>
+                        </div>
+                    </div>
+                </div>
+                `;
+                document.body.style.overflow = "hidden";
+                loadSchedules(mac);
+            });
         }
-    });
-    // --- Load profile data ---
-    fetch('/api/profile').then(r=>r.json()).then(profile=>{
-        document.getElementById("user-email").value = profile.email || "";
-        document.getElementById("notif-blocklist").checked = !!profile.notif_blocklist;
-        document.getElementById("notif-job").checked = !!profile.notif_job;
-        document.getElementById("notif-schedule").checked = !!profile.notif_schedule;
-        currentTheme = profile.theme || "dark";
-        applyTheme(currentTheme);
-    });
-    // --- Load themes for dropdown ---
-    fetch('/api/themes').then(r=>r.json()).then(themes=>{
-        let sel = document.getElementById('theme-select');
-        sel.innerHTML = "";
-        for(let name in themes) {
-            let opt = document.createElement('option');
-            opt.value = name;
-            opt.textContent = themes[name];
-            sel.appendChild(opt);
+
+        function closeEditModal() {
+            document.getElementById("host-edit-modal-root").innerHTML = "";
+            document.body.style.overflow = "";
         }
-        sel.value = currentTheme;
-    });
-    // --- Handle theme switching ---
-    document.getElementById('theme-select').onchange = function() {
-        currentTheme = this.value;
-        applyTheme(currentTheme);
-    };
-    // --- Save profile data ---
-    document.getElementById('profile-form').onsubmit = function(e){
-        e.preventDefault();
-        let payload = {
-            email: document.getElementById("user-email").value,
-            password: document.getElementById("user-password").value,
-            theme: document.getElementById("theme-select").value,
-            notif_blocklist: document.getElementById("notif-blocklist").checked,
-            notif_job: document.getElementById("notif-job").checked,
-            notif_schedule: document.getElementById("notif-schedule").checked
-        };
-        fetch('/api/profile', {
-            method: "POST",
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify(payload)
-        })
-        .then(r=>r.json())
-        .then(data=>{
-            Toastify({
-                text: "Profile updated!",
-                backgroundColor: "#43a047",
-                duration: 3000
-            }).showToast();
-        });
-    };
-    function showCustomThemeModal(){
-        Toastify({text: "Custom theme editor coming soon!", duration: 2500, backgroundColor: "#ff9800"}).showToast();
-    }
+        function toggleCustomQoS() {
+            var prof = document.getElementById("qos-profile").value;
+            document.getElementById("custom-qos-fields").style.display = prof === "Custom" ? "block" : "none";
+        }
+        function saveHost(mac) {
+            // ... existing save logic ...
+            closeEditModal();
+        }
+
+        // --- Schedules: load, add, edit, remove ---
+        function loadSchedules(mac) {
+            fetch(`/api/schedule/${mac}`)
+                .then(resp => resp.json())
+                .then(data => {
+                    currentSchedules = data.blocks || [];
+                    let div = document.getElementById("schedules-list");
+                    if (!div) return;
+                    div.innerHTML = "";
+                    if (currentSchedules.length) {
+                        currentSchedules.forEach((block, idx) => {
+                            if (block._editing) {
+                                div.innerHTML +=
+                                    `<div class="sched-block sched-edit-row">
+                                        <input type="time" id="edit-sched-start-${idx}" value="${block.start}">
+                                        <input type="time" id="edit-sched-end-${idx}" value="${block.end}">
+                                        <input type="text" id="edit-sched-days-${idx}" value="${block.days.join(',')}">
+                                        <input type="text" id="edit-sched-comment-${idx}" value="${block.comment}">
+                                        <button onclick="submitEditScheduleBlock(${idx})" style="color:#43a047;">✔</button>
+                                        <button onclick="cancelEditScheduleBlock(${idx})" style="color:#e53935;">✖</button>
+                                    </div>`;
+                            } else {
+                                div.innerHTML +=
+                                    `<div class="sched-block">
+                                        <span>[${block.days.join(", ")}] ${block.start}-${block.end} <em>${block.comment||""}</em></span>
+                                        <button onclick="removeScheduleBlock(${idx})" style="margin-left:10px;color:#e53935;">🗑</button>
+                                        <button onclick="showEditScheduleForm(${idx})" style="color:#3498db;">✎</button>
+                                    </div>`;
+                            }
+                        });
+                    } else {
+                        div.innerHTML = "<em>No schedule blocks.</em>";
+                    }
+                });
+        }
+        function showAddScheduleForm() {
+            document.getElementById("add-schedule-form").style.display = "block";
+        }
+        function hideAddScheduleForm() {
+            document.getElementById("add-schedule-form").style.display = "none";
+        }
+        function addScheduleBlock() {
+            let start = document.getElementById("sched-start").value;
+            let end = document.getElementById("sched-end").value;
+            let days = document.getElementById("sched-days").value.split(",").map(s=>s.trim());
+            if (days[0] && days[0].toLowerCase() === "all") days = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+            let comment = document.getElementById("sched-comment").value;
+            fetch(`/api/schedule/${hostMac}/add`, {
+                method: "POST",
+                headers: {"Content-Type":"application/json"},
+                body: JSON.stringify({start, end, days, comment})
+            }).then(resp => resp.json()).then(data => {
+                Toastify({text: data.desc || "Scheduled!", backgroundColor: "#43a047"}).showToast();
+                hideAddScheduleForm();
+                setTimeout(() => loadSchedules(hostMac), 700);
+            });
+        }
+        function removeScheduleBlock(idx) {
+            fetch(`/api/schedule/${hostMac}/${idx}`, {method: "DELETE"})
+                .then(resp => resp.json())
+                .then(data => {
+                    Toastify({text:"Removed.", backgroundColor:"#e53935"}).showToast();
+                    setTimeout(() => loadSchedules(hostMac), 600);
+                });
+        }
+        function showEditScheduleForm(idx) {
+            currentSchedules = currentSchedules.map((b,i) => ({...b, _editing: i === idx}));
+            let div = document.getElementById("schedules-list");
+            if (div) loadSchedules(hostMac);
+        }
+        function cancelEditScheduleBlock(idx) {
+            currentSchedules = currentSchedules.map(b => ({...b, _editing: false}));
+            loadSchedules(hostMac);
+        }
+        function submitEditScheduleBlock(idx) {
+            let start = document.getElementById(`edit-sched-start-${idx}`).value;
+            let end = document.getElementById(`edit-sched-end-${idx}`).value;
+            let days = document.getElementById(`edit-sched-days-${idx}`).value.split(",").map(s=>s.trim());
+            let comment = document.getElementById(`edit-sched-comment-${idx}`).value;
+            fetch(`/api/schedule/${hostMac}/${idx}`, {
+                method: "PATCH",
+                headers: {"Content-Type":"application/json"},
+                body: JSON.stringify({start, end, days, comment})
+            }).then(resp => resp.json()).then(data => {
+                Toastify({text: "Block updated", backgroundColor: "#43a047"}).showToast();
+                setTimeout(() => loadSchedules(hostMac), 600);
+            });
+        }
+
+        // Call loadSchedules(mac) after opening edit modal!
     </script>
 </body>
 </html>

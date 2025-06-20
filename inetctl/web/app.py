@@ -1,118 +1,177 @@
 import os
-import json
-import sqlite3
-from flask import Flask, render_template, jsonify, request
+import sys
+import logging
+from flask import Flask, render_template, request, redirect, url_for, jsonify, session, flash
+from flask_login import LoginManager, login_user, logout_user, current_user, login_required
+from inetctl.web.views import register_blueprints
+from inetctl.core.config_loader import load_config
+from inetctl.core.theme import THEMES, get_theme
+from inetctl.core.user import User, get_user_by_username, pam_authenticate, get_or_create_profile
+from inetctl.core.job_queue_service import job_queue
+from inetctl.core.logger import log_event
+from inetctl.core.notify import send_notification, broadcast_notification
+from inetctl.core.cli_groups import user_is_in_group, required_groups
+from inetctl.core.netplan import get_vlan_list, get_vlan_map
+from inetctl.core.hosts import get_hosts_by_vlan, get_host_data, update_host_config
+from inetctl.core.transfer import get_transfer_history
+from inetctl.core.schedules import get_schedules, validate_schedule, add_schedule_block
+from inetctl.core.validators import validate_config
+from inetctl.core.settings import APP_TITLE
 
-from inetctl.core import netplan  # << USE YOUR CORE
-
-# Paths (adjust as needed)
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(BASE_DIR, "db.sqlite3")
-LEASES_PATH = os.path.join(BASE_DIR, "dhcp.leases")
-RESERVATIONS_PATH = os.path.join(BASE_DIR, "dhcp.reservations.json")
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(APP_TITLE)
 
 app = Flask(__name__)
+app.secret_key = os.environ.get("SECRET_KEY", "insecure_dev_key")
 
-def load_leases():
-    leases = []
-    if not os.path.exists(LEASES_PATH):
-        return leases
-    with open(LEASES_PATH, "r") as f:
-        for line in f:
-            if not line.strip(): continue
-            parts = line.split()
-            if len(parts) >= 5:
-                leases.append({
-                    "expires": int(parts[0]),
-                    "mac": parts[1].lower(),
-                    "ip": parts[2],
-                    "hostname": parts[3],
-                })
-    return leases
+# Flask-Login config
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = "auth.login"
 
-def load_reservations():
-    if not os.path.exists(RESERVATIONS_PATH):
-        return []
-    with open(RESERVATIONS_PATH, "r") as f:
-        return json.load(f)
+# Modular blueprint registration
+register_blueprints(app)
 
-def load_hosts_db():
-    hosts = {}
-    if not os.path.exists(DB_PATH):
-        return hosts
-    conn = sqlite3.connect(DB_PATH)
-    cur = conn.cursor()
-    try:
-        cur.execute("CREATE TABLE IF NOT EXISTS hosts (mac TEXT PRIMARY KEY, description TEXT, qos_profile TEXT, qos_dl TEXT, qos_ul TEXT, schedule TEXT)")
-        for row in cur.execute("SELECT mac, description, qos_profile, qos_dl, qos_ul, schedule FROM hosts"):
-            mac, description, qos_profile, qos_dl, qos_ul, schedule = row
-            hosts[mac.lower()] = {
-                "description": description,
-                "qos_profile": qos_profile,
-                "qos_dl": qos_dl,
-                "qos_ul": qos_ul,
-                "schedule": schedule
-            }
-    except Exception:
-        pass
-    conn.close()
-    return hosts
+# Theming context processor
+@app.context_processor
+def inject_theme():
+    user_theme = getattr(current_user, "theme", None)
+    theme_key = user_theme or session.get("theme") or "dark"
+    theme = get_theme(theme_key)
+    return dict(THEMES=THEMES, theme=theme, theme_key=theme_key, APP_TITLE=APP_TITLE)
 
+# --- Login Management ---
+@login_manager.user_loader
+def load_user(user_id):
+    return get_user_by_username(user_id)
+
+@app.before_request
+def before_request():
+    # Apply group authentication to CLI calls
+    if current_user.is_authenticated:
+        if not user_is_in_group(current_user.username):
+            logger.warning(f"User {current_user.username} attempted access without correct group membership.")
+            logout_user()
+            flash("You are not authorized for CLI or web access. Please contact your administrator.", "error")
+            return redirect(url_for('auth.login'))
+    # Check for config validation
+    if not validate_config():
+        logger.error("Configuration validation failed.")
+        flash("Configuration file is corrupted or invalid. Please check your server or contact admin.", "error")
+        return redirect(url_for('admin.config_repair'))
+    # PAM auto-profile creation for web logins
+    if current_user.is_authenticated:
+        get_or_create_profile(current_user.username)
+
+# --- Home / Dashboard ---
 @app.route("/")
+@login_required
 def home():
-    config = netplan.load_config()
-    vlan_info = netplan.get_vlan_info(config)
-    vlan_ids = [str(vlan['id']) for vlan in vlan_info]
-    if "1" not in vlan_ids:
-        vlan_ids = ["1"] + vlan_ids  # Always include base VLAN 1
-    vlan_ids = sorted(set(vlan_ids), key=lambda v: int(v))
-
-    leases = load_leases()
-    reservations = load_reservations()
-    hosts_db = load_hosts_db()
-
-    active_by_vlan = {vlan: [] for vlan in vlan_ids}
-    unassigned_by_vlan = {vlan: [] for vlan in vlan_ids}
-
-    leased_macs = set([lease["mac"] for lease in leases])
-    for lease in leases:
-        vlan_id = netplan.get_vlan_id_for_ip(lease["ip"], config)
-        db_info = hosts_db.get(lease["mac"], {})
-        is_reserved = any(
-            r["mac"].lower() == lease["mac"] and r["ip"] == lease["ip"]
-            for r in reservations
-        )
-        device = {
-            "mac": lease["mac"],
-            "ip": lease["ip"],
-            "hostname": lease["hostname"],
-            "description": db_info.get("description", lease["hostname"]),
-            "assignment_status": "Reservation" if is_reserved else "Dynamic",
-            "is_online": True,
-            "network_access_blocked": False,
-        }
-        active_by_vlan.setdefault(vlan_id, []).append(device)
-
-    for r in reservations:
-        if r["mac"] not in leased_macs:
-            vlan_id = netplan.get_vlan_id_for_ip(r["ip"], config)
-            db_info = hosts_db.get(r["mac"], {})
-            reservation = {
-                "mac": r["mac"],
-                "ip": r["ip"],
-                "hostname": db_info.get("hostname", r.get("hostname", "")),
-                "description": db_info.get("description", r.get("hostname", "")),
-            }
-            unassigned_by_vlan.setdefault(vlan_id, []).append(reservation)
-
+    # VLAN tab info
+    vlan_list = get_vlan_list()
+    vlan_map = get_vlan_map()  # e.g. {vlan_id: {name, interface, ...}}
+    selected_vlan = request.args.get("vlan", "1")
+    hosts_by_vlan = {vlan_id: get_hosts_by_vlan(vlan_id) for vlan_id in vlan_list}
+    schedules = get_schedules()
+    notifications = session.pop("notifications", [])
     return render_template(
         "home.html",
-        vlan_ids=vlan_ids,
-        active_by_vlan=active_by_vlan,
-        unassigned_by_vlan=unassigned_by_vlan
+        vlan_list=vlan_list,
+        vlan_map=vlan_map,
+        selected_vlan=selected_vlan,
+        hosts_by_vlan=hosts_by_vlan,
+        schedules=schedules,
+        notifications=notifications,
+        APP_TITLE=APP_TITLE,
     )
 
-# [rest of your Flask endpoints, unchanged...]
+# --- Host Edit Overlay ---
+@app.route("/api/host/<mac>", methods=["GET", "POST"])
+@login_required
+def host_edit(mac):
+    if request.method == "GET":
+        host = get_host_data(mac)
+        return jsonify(host)
+    # Save edited host info
+    data = request.json
+    update_host_config(mac, data)
+    job_queue.enqueue("update_host", mac=mac, data=data)
+    log_event("host_edit", f"User {current_user.username} edited host {mac}")
+    send_notification(f"Host {mac} configuration updated.", users=[current_user.username])
+    return jsonify({"success": True})
 
+# --- Transfer Graph API ---
+@app.route("/api/transfer/<mac>")
+@login_required
+def transfer_api(mac):
+    hours = int(request.args.get("hours", 1))
+    history = get_transfer_history(mac, hours)
+    return jsonify(history)
+
+# --- Toggle Network Access (Block/Allow) ---
+@app.route("/toggle_access", methods=["POST"])
+@login_required
+def toggle_access():
+    mac = request.json["mac"]
+    result = job_queue.enqueue("toggle_access", mac=mac, user=current_user.username)
+    broadcast_notification(f"Network access for {mac} queued for update.")
+    log_event("access_toggle", f"{current_user.username} queued access toggle for {mac}")
+    return jsonify({
+        "queued": True,
+        "message": "Access change queued for host.",
+        "job_id": result.job_id,
+    })
+
+@app.route("/job_status/<job_id>")
+@login_required
+def job_status(job_id):
+    job = job_queue.status(job_id)
+    return jsonify(job)
+
+# --- Theme selection / Profile ---
+@app.route("/profile", methods=["GET", "POST"])
+@login_required
+def user_profile():
+    if request.method == "GET":
+        return render_template("profile.html", user=current_user, THEMES=THEMES)
+    # Update profile (theme, notification prefs, etc.)
+    theme = request.form.get("theme")
+    notification_options = request.form.getlist("notifications")
+    current_user.update_profile(theme=theme, notifications=notification_options)
+    session["theme"] = theme
+    flash("Profile updated.", "success")
+    return redirect(url_for("user_profile"))
+
+# --- Admin/config repair page ---
+@app.route("/admin/config_repair", methods=["GET", "POST"])
+@login_required
+def config_repair():
+    if request.method == "GET":
+        return render_template("config_repair.html")
+    # Attempt repair (auto-backup, restore, notify)
+    repaired = validate_config(auto_repair=True)
+    if repaired:
+        flash("Configuration was automatically repaired!", "success")
+    else:
+        flash("Auto-repair failed. Manual intervention required.", "error")
+    return redirect(url_for("home"))
+
+# --- Scheduler API (Multiple schedule blocks) ---
+@app.route("/api/schedule/<mac>", methods=["POST"])
+@login_required
+def schedule_api(mac):
+    schedule_blocks = request.json.get("blocks", [])
+    # Validate and add (no overlaps)
+    result, message = add_schedule_block(mac, schedule_blocks)
+    if result:
+        job_queue.enqueue("schedule_update", mac=mac, blocks=schedule_blocks)
+        send_notification(f"Schedule updated for {mac}.")
+        return jsonify({"success": True})
+    else:
+        return jsonify({"success": False, "message": message})
+
+# --- Run the Flask app ---
 if __name__ == "__main__":
-    app.run(debug=True, host="0.0.0.0")
+    # This is a demo/dev runner. Use gunicorn/production server in prod.
+    app.run(host="0.0.0.0", port=8080, debug=True)

@@ -1,39 +1,27 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login - inetctl</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css" />
+    <title>Login - Linux Network Management Toolbox</title>
+    <!--THEME_VARS-->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
 </head>
 <body>
-    <main class="container" style="max-width: 500px; margin-top: 10vh;">
-        <article>
-            <hgroup>
-                <h1>inetctl Login</h1>
-                <h2>Please sign in to continue</h2>
-            </hgroup>
-
-            {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-            {% for category, message in messages %}
-            {% if category == 'error' %}
-            <p style="color: var(--pico-color-red-600);">{{ message }}</p>
-            {% endif %}
-            {% endfor %}
-            {% endif %}
-            {% endwith %}
-
-            <form method="post">
-                <label for="username">Username</label>
-                <input type="text" id="username" name="username" required>
-
-                <label for="password">Password</label>
-                <input type="password" id="password" name="password" required>
-
-                <button type="submit">Login</button>
-            </form>
-        </article>
-    </main>
+<main class="container">
+    <h1>Login</h1>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <div class="alert {{category}}">{{ message }}</div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+    <form method="POST">
+        <label for="username">Username</label>
+        <input name="username" id="username" autocomplete="username" required>
+        <label for="password">Password</label>
+        <input name="password" id="password" type="password" autocomplete="current-password" required>
+        <button type="submit">Login</button>
+    </form>
+</main>
 </body>
 </html>

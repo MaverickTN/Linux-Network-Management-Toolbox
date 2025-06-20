@@ -2,97 +2,126 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <title>{{ site_title }} - Netplan Configuration</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Edit Netplan Interface - inetctl</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <!--THEME_VARS-->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+    <style>
+        .error { color: var(--color-danger, #e74c3c); }
+        .success { color: var(--color-success, #43a047); }
+        .interface-list { margin: 1em 0; }
+        .interface-card { background: var(--color-background, #23272e); border-radius: 12px; margin-bottom: 1em; box-shadow: 0 2px 8px rgba(0,0,0,0.07);}
+        .interface-header { font-weight: bold; margin-bottom: 0.3em; }
+        .vlan-badge { background: var(--color-primary, #3498db); color: #fff; border-radius: 6px; padding: 0.1em 0.7em; font-size: 1em; margin-right: 1em;}
+        .vlan-id { font-weight: bold; font-size: 1.05em; }
+        .btn-inline-edit { background: var(--color-accent, #f39c12); color: #fff; border: none; border-radius: 5px; padding: 0.3em 0.7em; font-size: 0.95em; cursor: pointer;}
+        .btn-inline-edit:hover { background: var(--color-primary, #3498db);}
+        textarea.code-yaml { width: 100%; height: 220px; font-family: "JetBrains Mono", "Fira Mono", "Consolas", monospace; font-size: 1em; background: #1b1b1b; color: #e7e7e7; border-radius: 8px; border: 1px solid #333;}
+        .field-label { font-size: 1.04em; font-weight: bold; margin-bottom: 0.3em;}
+        .actions-bar { text-align: right; margin: 1em 0; }
+        .notification { margin: 0.7em 0; padding: 0.7em; border-radius: 7px; font-size: 1em;}
+        .notification.error { background: var(--color-danger, #e74c3c); color: #fff;}
+        .notification.success { background: var(--color-success, #43a047); color: #fff;}
+        .config-valid { color: var(--color-success, #43a047); font-weight: bold;}
+        .config-invalid { color: var(--color-danger, #e74c3c); font-weight: bold;}
+        .netplan-summary { margin-bottom: 1em; color: var(--color-info, #007bff);}
+    </style>
 </head>
-<body class="bg-gray-900 text-gray-200 font-sans">
-    <div class="container mx-auto p-4 sm:p-6 lg:p-8 max-w-4xl">
-        <div class="flex justify-between items-center mb-6">
-            <h1 class="text-3xl font-bold text-white">Edit: <span class="text-cyan-400 font-mono">{{ iface.interface }}</span></h1>
-            <a href="{{ url_for('networks_list') }}" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg">Back to Networks</a>
-        </div>
+<body>
+<main class="container">
+    <nav>
+        <ul style="display:flex; justify-content:space-between; align-items:center; list-style:none; padding:0;">
+            <li><a href="/" style="font-weight:bold; font-size:1.2em;">&#x21B6; Dashboard</a></li>
+            <li style="text-align:right;">
+                <span class="site-title" style="font-size:1.05em; font-weight:600;">{{ site_title }}</span>
+            </li>
+        </ul>
+    </nav>
+    <h1>Netplan Configuration</h1>
+    <p class="netplan-summary">
+        Edit and manage system-wide network interfaces, VLANs, and subnets. All changes are syntax-checked and will not be applied if invalid.
+    </p>
 
-        <!-- Main Interface Details Form -->
-        <div class="bg-gray-800 rounded-lg shadow-xl p-6 mb-8">
-            <h2 class="text-xl font-semibold mb-4">Interface Details</h2>
-            <form method="POST" action="{{ url_for('netplan_edit', section=iface.section, file_b64=iface.file_b64, interface=iface.interface) }}">
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                        <label for="addresses" class="block text-sm font-medium text-gray-300 mb-1">Addresses (comma separated)</label>
-                        <input type="text" name="addresses" id="addresses" class="w-full bg-gray-700 border border-gray-600 text-white rounded-md" value="{{ iface.addresses|join(', ') }}">
-                    </div>
-                    <div class="flex items-end space-x-8">
-                        <div class="flex items-center">
-                            <input type="checkbox" name="dhcp4" id="dhcp4" class="h-4 w-4 rounded" {% if iface.dhcp4 %}checked{% endif %}>
-                            <label for="dhcp4" class="ml-2">DHCP4</label>
-                        </div>
-                        <div class="flex items-center">
-                            <input type="checkbox" name="dhcp6" id="dhcp6" class="h-4 w-4 rounded" {% if iface.dhcp6 %}checked{% endif %}>
-                            <label for="dhcp6" class="ml-2">DHCP6</label>
-                        </div>
-                    </div>
-                </div>
-                <div class="mt-6 flex justify-end">
-                    <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg">Save Interface Changes</button>
-                </div>
-            </form>
-        </div>
-
-        <!-- Routes Section -->
-        <div class="bg-gray-800 rounded-lg shadow-xl p-6">
-            <h2 class="text-xl font-semibold mb-4">Static Routes</h2>
-            <!-- List Existing Routes -->
-            <div class="mb-6">
-                {% if iface.raw.get('routes') %}
-                    <ul class="divide-y divide-gray-700">
-                    {% for route in iface.raw.routes %}
-                        <li class="py-3 flex justify-between items-center">
-                            <div>
-                                <p class="font-mono text-lg">To: <span class="text-green-400">{{ route.to }}</span></p>
-                                <p class="font-mono text-sm text-gray-400">
-                                    {% if route.via %}
-                                        Via: <span class="text-yellow-400">{{ route.via }}</span>
-                                    {% elif route['on-link'] %}
-                                        <span class="text-purple-400">On-Link</span>
-                                    {% endif %}
-                                </p>
-                            </div>
-                            <form method="POST" action="{{ url_for('netplan_route_delete', section=iface.section, file_b64=iface.file_b64, interface=iface.interface) }}" onsubmit="return confirm('Delete this route?');">
-                                <input type="hidden" name="to" value="{{ route.to }}">
-                                <input type="hidden" name="via" value="{{ route.via if route.via else '' }}">
-                                <button type="submit" class="bg-red-600 hover:bg-red-700 text-white font-bold py-1 px-3 rounded-lg">Delete</button>
-                            </form>
-                        </li>
-                    {% endfor %}
-                    </ul>
+    {% if msg %}
+        <div class="notification {{ 'success' if msg_type == 'success' else 'error' }}">{{ msg }}</div>
+    {% endif %}
+    <form method="post" action="{{ url_for('netplan_save') }}">
+        <div>
+            <div class="field-label">Raw Netplan YAML:</div>
+            <textarea name="config_yaml" class="code-yaml" spellcheck="false" required
+                id="config-yaml-text">{{ config_yaml | safe }}</textarea>
+            <div id="yaml-status">
+                {% if config_valid %}
+                    <span class="config-valid">&#x2714; Configuration is valid.</span>
                 {% else %}
-                    <p class="text-gray-400">No static routes defined for this interface.</p>
+                    <span class="config-invalid">&#x2717; Configuration is invalid.</span>
                 {% endif %}
             </div>
-            
-            <!-- Add New Route Form -->
-            <div class="border-t border-gray-700 pt-6">
-                <h3 class="text-lg font-semibold mb-4">Add New Route</h3>
-                <form method="POST" action="{{ url_for('netplan_route_add', section=iface.section, file_b64=iface.file_b64, interface=iface.interface) }}" class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
-                    <div>
-                        <label for="to" class="block text-sm font-medium">To (CIDR)</label>
-                        <input type="text" name="to" id="to" placeholder="e.g., 10.0.0.0/8" required class="w-full bg-gray-700 border border-gray-600 rounded-md">
-                    </div>
-                    <div>
-                        <label for="via" class="block text-sm font-medium">Via (Gateway)</label>
-                        <input type="text" name="via" id="via" placeholder="e.g., 192.168.1.254" class="w-full bg-gray-700 border border-gray-600 rounded-md">
-                    </div>
-                    <div class="flex items-center space-x-4">
-                        <div class="flex items-center">
-                            <input type="checkbox" name="on_link" id="on_link" class="h-4 w-4 rounded">
-                            <label for="on_link" class="ml-2">On-Link</label>
-                        </div>
-                        <button type="submit" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg w-full">Add Route</button>
-                    </div>
-                </form>
-            </div>
         </div>
+        <div class="actions-bar">
+            <button type="button" onclick="reloadConfig()" style="margin-right:0.6em;">Reload</button>
+            <button type="submit" id="save-btn">Save &amp; Apply</button>
+        </div>
+    </form>
+
+    <h2>Interfaces &amp; VLANs</h2>
+    <div class="interface-list">
+        {% for intf in interfaces %}
+            <div class="interface-card">
+                <div class="interface-header">
+                    {% if intf.type == "vlan" %}
+                        <span class="vlan-badge">VLAN {{ intf.params.id or intf.name.split('.')[-1] }}</span>
+                        <span class="vlan-id">{{ intf.name }}</span>
+                    {% else %}
+                        <span class="vlan-badge" style="background:var(--color-success, #43a047);">Base</span>
+                        <span class="vlan-id">{{ intf.name }}</span>
+                    {% endif %}
+                </div>
+                <div>
+                    <strong>Type:</strong> {{ intf.type | capitalize }}
+                    {% if intf.params.id %} | <strong>ID:</strong> {{ intf.params.id }} {% endif %}
+                    {% if intf.params.addresses %} | <strong>Addresses:</strong> {{ intf.params.addresses|join(", ") }} {% endif %}
+                    {% if intf.params.gateway4 %} | <strong>Gateway:</strong> {{ intf.params.gateway4 }} {% endif %}
+                </div>
+                {% if intf.type == "vlan" %}
+                <div>
+                    <strong>Link:</strong> {{ intf.params.link }} | <strong>VLAN ID:</strong> {{ intf.params.id }}
+                </div>
+                {% endif %}
+            </div>
+        {% else %}
+            <div>No interfaces found in Netplan config.</div>
+        {% endfor %}
     </div>
+    <form method="post" action="{{ url_for('netplan_apply') }}">
+        <div class="actions-bar">
+            <button type="submit" id="apply-btn">Apply Netplan Now</button>
+        </div>
+    </form>
+</main>
+<script>
+function reloadConfig() {
+    window.location.reload();
+}
+
+// Live YAML validation with toast notification
+document.getElementById("config-yaml-text").addEventListener("input", function() {
+    let content = this.value;
+    fetch("{{ url_for('netplan_validate') }}", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({yaml: content})
+    }).then(resp => resp.json()).then(data => {
+        let statusDiv = document.getElementById("yaml-status");
+        if (data.valid) {
+            statusDiv.innerHTML = '<span class="config-valid">&#x2714; Configuration is valid.</span>';
+            document.getElementById("save-btn").disabled = false;
+        } else {
+            statusDiv.innerHTML = '<span class="config-invalid">&#x2717; Invalid: ' + data.errors.join("; ") + '</span>';
+            document.getElementById("save-btn").disabled = true;
+        }
+    });
+});
+</script>
 </body>
 </html>

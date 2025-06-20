@@ -1,28 +1,44 @@
-from flask import Blueprint, render_template, request, session, redirect, url_for, flash
+from flask import Blueprint, render_template, request, redirect, url_for, flash, session
 from flask_login import login_required, current_user
-from inetctl.theme import get_theme, APP_TITLE
+from inetctl.core.user_profiles import (
+    get_user_profile, update_user_profile, THEMES, list_theme_names
+)
+import os
 
-bp = Blueprint("profile", __name__, url_prefix="/profile")
+profile_bp = Blueprint("profile", __name__, url_prefix="/profile")
 
-@bp.route("/", methods=["GET", "POST"])
+@profile_bp.route("/", methods=["GET", "POST"])
 @login_required
 def profile():
-    # Available theme names
-    themes = {k: v["name"] for k, v in get_theme().items()}
-    current_theme = session.get("theme", "dark")
-    user = current_user
+    username = current_user.username
+    profile = get_user_profile(username)
+    theme_names = list_theme_names()
 
     if request.method == "POST":
-        # Handle user info update
-        if "theme" in request.form:
-            session["theme"] = request.form["theme"]
-        if "email" in request.form:
-            user.email = request.form["email"]
-        # ... handle notification prefs, password, etc.
-        flash("Profile updated", "success")
+        # Collect form data, only update allowed fields
+        display_name = request.form.get("display_name", username)
+        email = request.form.get("email", "")
+        theme = request.form.get("theme", profile.get("theme", "dark"))
+        # Notifications can be toggled as checkboxes
+        notifications = {
+            "job_events": bool(request.form.get("notify_job_events")),
+            "timer_events": bool(request.form.get("notify_timer_events")),
+            "login_events": bool(request.form.get("notify_login_events")),
+            "critical": bool(request.form.get("notify_critical")),
+            "info": bool(request.form.get("notify_info"))
+        }
+        update_user_profile(
+            username,
+            display_name=display_name,
+            email=email,
+            theme=theme,
+            notifications=notifications
+        )
+        flash("Profile updated!", "success")
         return redirect(url_for("profile.profile"))
-    return render_template("profile.html",
-                           user=user,
-                           themes=themes,
-                           current_theme=current_theme,
-                           APP_TITLE=APP_TITLE)
+    return render_template(
+        "profile.html",
+        user=current_user,
+        profile=profile,
+        theme_names=theme_names
+    )

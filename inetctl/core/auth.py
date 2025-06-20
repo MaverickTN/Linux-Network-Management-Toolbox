@@ -1,85 +1,139 @@
-import sqlite3
-from pathlib import Path
-from flask_login import UserMixin
-from passlib.context import CryptContext
+import pam
+import getpass
+import os
+from functools import wraps
+from inetctl.core.user_profile import (
+    load_user_profile,
+    get_access_level,
+    user_exists_on_host,
+    block_creation_of_existing_host_user,
+    save_user_profile,
+    update_user_profile,
+    list_profiles,
+)
 
-DB_FILE = Path("./inetctl_stats.db")
-pwd_context = CryptContext(schemes=["argon2", "bcrypt"], deprecated="auto")
+# Required system groups
+GROUPS = {
+    "admin": "lnmtadm",
+    "operator": "lnmt",
+    "view": "lnmtv"
+}
 
-class User(UserMixin):
-    """A user class for Flask-Login."""
-    def __init__(self, user_id, username, role):
-        self.id = user_id
-        self.username = username
-        self.role = role
-
-def setup_users_table():
-    """Ensures the users table and a default admin (if needed) exist."""
-    conn = None
-    try:
-        conn = sqlite3.connect(DB_FILE, timeout=10)
-        cursor = conn.cursor()
-        cursor.execute("""
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT UNIQUE NOT NULL,
-            password_hash TEXT NOT NULL,
-            role TEXT NOT NULL CHECK(role IN ('admin', 'operator', 'viewer'))
-        )
-        """)
-        conn.commit()
-    except sqlite3.Error as e:
-        print(f"CRITICAL [auth.setup_users_table]: Could not set up users table: {e}")
-    finally:
-        if conn: conn.close()
-
-def hash_password(password: str) -> str:
-    """Hashes a plain-text password."""
-    return pwd_context.hash(password)
-
-def verify_password(password: str, password_hash: str) -> bool:
-    """Verifies a plain-text password against a stored hash."""
-    return pwd_context.verify(password, password_hash)
-
-def add_user(username: str, password_hash: str, role: str) -> bool:
-    """Adds a new user to the database."""
-    conn = None
-    try:
-        conn = sqlite3.connect(DB_FILE)
-        cursor = conn.cursor()
-        cursor.execute("INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)", (username, password_hash, role))
-        conn.commit()
+def pam_authenticate(username, password):
+    """Authenticate a system user via PAM."""
+    p = pam.pam()
+    if p.authenticate(username, password):
         return True
-    except sqlite3.IntegrityError:
-        return False
-    finally:
-        if conn: conn.close()
+    return False
 
-def get_user_by_name(username: str):
-    """Retrieves a single user by their username."""
-    conn = sqlite3.connect(DB_FILE); conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
-    user_row = cursor.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
-    conn.close()
-    if user_row: return User(user_id=user_row['id'], username=user_row['username'], role=user_row['role']), user_row['password_hash']
-    return None, None
-    
-def get_user_by_id(user_id: int) -> User:
-    """Retrieves a user by their ID (required for Flask-Login)."""
-    conn = sqlite3.connect(DB_FILE); conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
-    user_row = cursor.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
-    conn.close()
-    if user_row: return User(user_id=user_row['id'], username=user_row['username'], role=user_row['role'])
-    return None
+def get_logged_in_user():
+    """Get the username of the currently logged-in user for CLI."""
+    try:
+        return os.getlogin()
+    except Exception:
+        return getpass.getuser()
 
-def get_all_users():
-    """Retrieves all users from the database for display purposes."""
-    conn = sqlite3.connect(DB_FILE); conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
-    users = cursor.execute("SELECT id, username, role FROM users ORDER BY username ASC").fetchall()
-    conn.close()
-    return users
+def login_and_profile(username=None, password=None):
+    """Authenticate via PAM and load or create the user profile."""
+    if username is None:
+        username = input("Username: ")
+    if password is None:
+        password = getpass.getpass("Password: ")
+    if not user_exists_on_host(username):
+        print("User does not exist on this system.")
+        return None
+    if not pam_authenticate(username, password):
+        print("Invalid credentials.")
+        return None
+    # Load or create profile (auto-assigned by group)
+    try:
+        profile = load_user_profile(username)
+    except PermissionError:
+        print("Access denied. Not a member of any allowed group.")
+        return None
+    return profile
 
-# Ensure the users table is created when this module is first imported.
-setup_users_table()
+def check_access(username, required="view"):
+    """
+    Check if user has at least the required access level.
+    required: "view" < "operator" < "admin"
+    """
+    order = ["none", "view", "operator", "admin"]
+    actual = get_access_level(username)
+    return order.index(actual) >= order.index(required)
+
+def require_access(required="view"):
+    """Decorator for CLI or web functions to enforce access control."""
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            username = get_logged_in_user()
+            if not check_access(username, required):
+                print(f"Access denied. '{required}' access required.")
+                return
+            return func(*args, **kwargs)
+        return wrapper
+    return decorator
+
+# --- For web: use with Flask or Starlette authentication middleware ---
+
+def web_user_loader(session):
+    """Get user from session (Flask or Starlette-style)."""
+    username = session.get("user")
+    if not username:
+        return None
+    try:
+        profile = load_user_profile(username)
+        return profile
+    except Exception:
+        return None
+
+def web_login(username, password, session):
+    if not user_exists_on_host(username):
+        return False, "User does not exist on this system."
+    if not pam_authenticate(username, password):
+        return False, "Invalid credentials."
+    try:
+        profile = load_user_profile(username)
+        session["user"] = username
+        session["theme"] = profile.get("theme", "dark")
+        session["access_level"] = profile.get("access_level", "view")
+        return True, "Login successful"
+    except PermissionError:
+        return False, "Access denied. Not a member of allowed group."
+
+def web_logout(session):
+    session.clear()
+    return True
+
+# -- CLI helper for enforcing group membership (used at command entry) --
+def cli_enforce_access(required="view"):
+    username = get_logged_in_user()
+    if not check_access(username, required):
+        print(f"Access denied: You must be in group '{GROUPS[required]}' or higher to use this command.")
+        exit(1)
+
+# --- Extendable: MFA, password update, registration stubs (not yet implemented) ---
+
+def change_password(username, old_password, new_password):
+    """
+    Change the system user's password (requires root or proper PAM config).
+    Not enabled by default. Needs further PAM or shadow integration.
+    """
+    # Not implemented for security; OS password changes are better done by 'passwd'
+    raise NotImplementedError("Password change not supported via this method.")
+
+def enable_mfa(username):
+    """
+    Stub for future MFA integration.
+    """
+    # Not yet implemented
+    return False
+
+# -- For completeness, web registration stub (blocks if user exists) --
+def web_register(username, password):
+    if block_creation_of_existing_host_user(username):
+        return False, "Cannot create user: System user already exists."
+    # Would add new user to system here; not implemented for security
+    return False, "Registration for new system users is not enabled."
+

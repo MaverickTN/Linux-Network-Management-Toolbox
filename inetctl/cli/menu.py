@@ -1,35 +1,64 @@
 import typer
-from inetctl.cli import scheduler, blocklist, reservation, theme
+from typing import Optional
+import sys
 
-app = typer.Typer(help="Linux Network Management Toolbox CLI Menu")
+from inetctl.cli import config_cli, schedule_cli, reservation_cli, blocklist_cli, user_cli
 
-app.add_typer(scheduler.app, name="schedule")
-app.add_typer(blocklist.app, name="blocklist")
-app.add_typer(reservation.app, name="reservation")
-app.add_typer(theme.app, name="theme")
+app = typer.Typer(
+    name="lnmt",
+    help="Linux Network Management Toolbox CLI",
+    no_args_is_help=True
+)
 
-@app.command("menu")
+# Add subcommands for each module
+app.add_typer(config_cli.app, name="config")
+app.add_typer(schedule_cli.app, name="schedule")
+app.add_typer(reservation_cli.app, name="reservation")
+app.add_typer(blocklist_cli.app, name="blocklist")
+app.add_typer(user_cli.app, name="user")
+
 def main_menu():
-    """
-    Interactive main menu for all CLI functions.
-    """
-    print("\n--- Linux Network Management Toolbox CLI ---")
-    print("1. Schedule Host Blacklist Blocks")
-    print("2. Block/Unblock Host")
-    print("3. Manage DHCP Reservations")
-    print("4. Theme Selection")
-    print("5. Exit")
-    choice = typer.prompt("Choose an option", type=int)
-    if choice == 1:
-        scheduler.schedule_menu()
-    elif choice == 2:
-        blocklist.block_menu()
-    elif choice == 3:
-        reservation.reservation_menu()
-    elif choice == 4:
-        theme.theme_menu()
-    else:
-        raise typer.Exit(0)
+    print("\n=== Linux Network Management Toolbox CLI ===")
+    print("Select a section:")
+    print("1. Config management")
+    print("2. Host schedules")
+    print("3. Reservations")
+    print("4. Blocklist")
+    print("5. User accounts")
+    print("0. Exit")
+    choice = input("\nEnter option: ").strip()
+    return choice
+
+def run_menu():
+    while True:
+        choice = main_menu()
+        if choice == "1":
+            config_cli.app()
+        elif choice == "2":
+            schedule_cli.app()
+        elif choice == "3":
+            reservation_cli.app()
+        elif choice == "4":
+            blocklist_cli.app()
+        elif choice == "5":
+            user_cli.app()
+        elif choice == "0":
+            print("Exiting. Goodbye.")
+            sys.exit(0)
+        else:
+            print("Invalid option. Try again.")
+
+@app.callback()
+def main(
+    menu: Optional[bool] = typer.Option(
+        None,
+        "--menu",
+        help="Force interactive menu (default if no args)."
+    )
+):
+    # If no args or --menu, show menu; otherwise, parse args normally.
+    if (len(sys.argv) == 1 and menu is None) or (menu is True):
+        run_menu()
 
 if __name__ == "__main__":
     app()

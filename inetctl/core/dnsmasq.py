@@ -1,119 +1,150 @@
+# inetctl/core/dnsmasq.py
+
 import os
 import re
-import ipaddress
+import logging
+from typing import List, Dict, Optional
 
-LEASES_PATH = "/var/lib/misc/dnsmasq.leases"
-RESERVATIONS_PATH = "/etc/dnsmasq.d/static.conf"  # adjust if yours differs
+LEASES_FILE = "/var/lib/misc/dnsmasq.leases"
+CONFIG_DIR = "/etc/dnsmasq.d/"
+logger = logging.getLogger("inetctl.core.dnsmasq")
 
-def parse_leases():
-    """Parse active DHCP leases."""
-    if not os.path.exists(LEASES_PATH):
-        return []
+def parse_leases_file(leases_path: str = LEASES_FILE) -> List[Dict]:
+    """
+    Parse the dnsmasq leases file and return a list of dicts:
+    [
+        {
+            "expiry": int,
+            "mac": str,
+            "ip": str,
+            "hostname": str,
+            "client_id": str
+        }, ...
+    ]
+    """
     leases = []
-    with open(LEASES_PATH) as f:
-        for line in f:
-            # Format: <expiry> <mac> <ip> <hostname> <client-id>
-            parts = line.strip().split()
-            if len(parts) < 5:
-                continue
-            leases.append({
-                "expiry": int(parts[0]),
-                "mac": parts[1].lower(),
-                "ip": parts[2],
-                "hostname": parts[3] if parts[3] != "*" else "",
-                "client_id": parts[4],
-                "active": True
-            })
+    try:
+        with open(leases_path, "r") as f:
+            for line in f:
+                parts = line.strip().split()
+                if len(parts) >= 5:
+                    lease = {
+                        "expiry": int(parts[0]),
+                        "mac": parts[1].lower(),
+                        "ip": parts[2],
+                        "hostname": parts[3] if parts[3] != "*" else "",
+                        "client_id": parts[4]
+                    }
+                    leases.append(lease)
+    except Exception as e:
+        logger.error(f"Failed to parse dnsmasq leases: {e}")
     return leases
 
-def parse_reservations():
-    """Parse static MAC/IP reservations."""
-    if not os.path.exists(RESERVATIONS_PATH):
-        return []
+def get_reservations(config_dir: str = CONFIG_DIR) -> List[Dict]:
+    """
+    Parse static DHCP reservations from config files in dnsmasq.d.
+    """
     reservations = []
-    # Example line: dhcp-host=00:11:22:33:44:55,10.0.1.100,MyHost,infinite
-    with open(RESERVATIONS_PATH) as f:
-        for line in f:
-            line = line.strip()
-            if not line or line.startswith("#"):
+    try:
+        for fname in os.listdir(config_dir):
+            if not fname.endswith(".conf"):
                 continue
-            m = re.match(r"dhcp-host=([0-9a-fA-F:]+),([\d\.]+),([^,]*),?", line)
-            if m:
-                mac, ip, hostname = m.group(1).lower(), m.group(2), m.group(3)
-                reservations.append({
-                    "mac": mac,
-                    "ip": ip,
-                    "hostname": hostname,
-                    "reservation": True
-                })
+            fpath = os.path.join(config_dir, fname)
+            with open(fpath, "r") as f:
+                for line in f:
+                    line = line.strip()
+                    # Example: dhcp-host=00:11:22:33:44:55,set:mytag,192.168.1.50
+                    match = re.match(r"dhcp-host=([^,]+),([^,]+),([^,]+)", line)
+                    if match:
+                        mac, tag, ip = match.groups()
+                        reservations.append({
+                            "mac": mac.lower(),
+                            "tag": tag,
+                            "ip": ip
+                        })
+    except Exception as e:
+        logger.error(f"Failed to parse reservations: {e}")
     return reservations
 
-def get_active_assignments():
-    """Return merged list of hosts with active leases and reservation info."""
-    leases = parse_leases()
-    reservations = parse_reservations()
-    result = []
-    res_by_mac = {r['mac']: r for r in reservations}
-    # Add leases (active assignments)
+def find_lease_by_mac(mac: str, leases: Optional[List[Dict]] = None) -> Optional[Dict]:
+    if leases is None:
+        leases = parse_leases_file()
     for lease in leases:
-        host = lease.copy()
-        if host['mac'] in res_by_mac:
-            host['reservation'] = True
-            host['hostname'] = res_by_mac[host['mac']]['hostname'] or host['hostname']
-        else:
-            host['reservation'] = False
-        host['blocked'] = is_blocked(host['mac'])
-        result.append(host)
-    # Add unassigned reservations
-    lease_macs = set(l['mac'] for l in leases)
+        if lease["mac"].lower() == mac.lower():
+            return lease
+    return None
+
+def find_reservation_by_mac(mac: str, reservations: Optional[List[Dict]] = None) -> Optional[Dict]:
+    if reservations is None:
+        reservations = get_reservations()
     for r in reservations:
-        if r['mac'] not in lease_macs:
-            host = r.copy()
-            host['active'] = False
-            host['blocked'] = is_blocked(host['mac'])
-            result.append(host)
-    return result
+        if r["mac"].lower() == mac.lower():
+            return r
+    return None
 
-def ip_in_subnet(ip, subnet):
-    """Return True if IP is in subnet (str: '10.0.1.10', '10.0.1.0/24')"""
+def assign_vlan_to_lease(lease: Dict, vlan_subnet_map: Dict[str, int]) -> int:
+    """
+    Given a lease {"ip": "10.0.1.23"} and a mapping of subnet->VLAN,
+    return the vlan_id for this lease.
+    """
+    for subnet, vlan_id in vlan_subnet_map.items():
+        if lease["ip"].startswith(subnet):
+            return vlan_id
+    return 1  # Default to VLAN 1 (base) if not matched
+
+def format_lease_display(lease: Dict, reservation: Optional[Dict] = None) -> Dict:
+    """
+    For dashboard table display: returns status, type, etc.
+    """
+    return {
+        "status": "online" if lease.get("expiry", 0) > 0 else "offline",
+        "assignment_type": "Reservation" if reservation else "Dynamic",
+        "mac": lease["mac"],
+        "ip": lease["ip"],
+        "hostname": lease.get("hostname", ""),
+        "reservation_ip": reservation["ip"] if reservation else "",
+    }
+
+def reload_dnsmasq():
+    """
+    Reload the dnsmasq service after config/reservation changes.
+    """
+    os.system("systemctl reload dnsmasq")
+    logger.info("dnsmasq reloaded.")
+
+def add_reservation(mac: str, ip: str, config_dir: str = CONFIG_DIR, tag: str = "reserved"):
+    """
+    Add a static reservation for a MAC/IP in dnsmasq.
+    """
+    # Choose a filename based on MAC
+    fname = os.path.join(config_dir, f"host_{mac.replace(':', '').lower()}.conf")
+    line = f"dhcp-host={mac},{tag},{ip}\n"
+    with open(fname, "w") as f:
+        f.write(line)
+    reload_dnsmasq()
+    logger.info(f"Added reservation: {mac} -> {ip}")
+
+def remove_reservation(mac: str, config_dir: str = CONFIG_DIR):
+    fname = os.path.join(config_dir, f"host_{mac.replace(':', '').lower()}.conf")
     try:
-        return ipaddress.IPv4Address(ip) in ipaddress.IPv4Network(subnet, strict=False)
-    except Exception:
-        return False
+        os.remove(fname)
+        reload_dnsmasq()
+        logger.info(f"Removed reservation for {mac}")
+    except FileNotFoundError:
+        logger.warning(f"No reservation file found for {mac}")
 
-# -- Block/allow utilities (using Shorewall or simple file/blocklist) --
-
-BLACKLIST_PATH = "/etc/inetctl/blacklist.txt"  # Adjust as needed
-
-def is_blocked(mac):
-    """Check if this MAC is in the blacklist file."""
-    if not os.path.exists(BLACKLIST_PATH):
-        return False
-    with open(BLACKLIST_PATH) as f:
-        return any(line.strip().lower() == mac for line in f)
-
-def block_mac(mac):
-    """Add MAC to blacklist."""
-    with open(BLACKLIST_PATH, "a") as f:
-        f.write(mac + "\n")
-    # Optionally call Shorewall or reload rules here
-
-def allow_mac(mac):
-    """Remove MAC from blacklist."""
-    if not os.path.exists(BLACKLIST_PATH):
-        return
-    with open(BLACKLIST_PATH) as f:
-        lines = f.readlines()
-    with open(BLACKLIST_PATH, "w") as f:
-        for line in lines:
-            if line.strip().lower() != mac:
-                f.write(line)
-    # Optionally reload Shorewall here
-
-def get_host_info(mac):
-    """Fetch merged lease/reservation info for this MAC."""
-    for host in get_active_assignments():
-        if host["mac"] == mac:
-            return host
-    return {"mac": mac, "ip": "", "subnet": "", "qos_profile": "Default"}
+# For CLI/Job Queue integration
+def reservation_job(mac: str, ip: str, action: str):
+    """
+    For job queue: queue add/remove reservation jobs.
+    """
+    logger.info(f"Queueing reservation job: {action} {mac} -> {ip}")
+    # Here you would put job in JobQueueService
+    # Example: JobQueueService.add_job(...)
+    if action == "add":
+        add_reservation(mac, ip)
+    elif action == "remove":
+        remove_reservation(mac)
+    else:
+        logger.error(f"Unknown reservation action: {action}")
 
