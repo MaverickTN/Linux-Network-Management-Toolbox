@@ -1,155 +1,98 @@
+# inetctl/core/user_manager.py
+
 import os
-import json
-import hashlib
-from pathlib import Path
-import crypt
 import pwd
 import grp
+import json
+from pathlib import Path
 
-USER_DATA_DIR = Path("/etc/inetctl/users")  # Adjust as needed (ensure secure permissions)
-USER_PROFILE_FILENAME = "profile.json"
-ALLOWED_GROUPS = {"lnmtadm", "lnmt", "lnmtv"}
+LNMT_GROUPS = ["lnmtadm", "lnmt", "lnmtv"]
+PROFILE_DIR = Path("/etc/lnmt/user_profiles")
 
-def get_user_profile_path(username):
-    return USER_DATA_DIR / username / USER_PROFILE_FILENAME
-
-def user_exists_on_system(username):
+def user_exists_on_host(username):
     try:
         pwd.getpwnam(username)
         return True
     except KeyError:
         return False
 
-def get_system_groups(username):
-    groups = [g.gr_name for g in grp.getgrall() if username in g.gr_mem]
+def user_group_memberships(username):
+    # Returns a set of all UNIX groups for the user
+    groups = set()
     try:
-        gid = pwd.getpwnam(username).pw_gid
-        groups.append(grp.getgrgid(gid).gr_name)
+        pw = pwd.getpwnam(username)
+        # primary group
+        groups.add(grp.getgrgid(pw.pw_gid).gr_name)
+        # supplementary groups
+        for g in grp.getgrall():
+            if username in g.gr_mem:
+                groups.add(g.gr_name)
     except Exception:
         pass
-    return set(groups)
+    return groups
 
-def ensure_user_profile(username):
-    profile_path = get_user_profile_path(username)
-    if not profile_path.parent.exists():
-        profile_path.parent.mkdir(parents=True, exist_ok=True)
-    if not profile_path.exists():
-        profile = {
-            "username": username,
-            "theme": "dark",
-            "notifications": [],
-            "email": "",
-            "custom_theme": {},
-            "groups": list(get_system_groups(username)),
-        }
-        with open(profile_path, "w") as f:
-            json.dump(profile, f)
-    return profile_path
+def user_can_access_cli(username):
+    # Must be in one of the LNMT groups
+    groups = user_group_memberships(username)
+    return any(g in groups for g in LNMT_GROUPS)
+
+def user_access_level(username):
+    # Returns 'admin', 'operator', or 'viewer', or None if not permitted
+    groups = user_group_memberships(username)
+    if "lnmtadm" in groups:
+        return "admin"
+    elif "lnmt" in groups:
+        return "operator"
+    elif "lnmtv" in groups:
+        return "viewer"
+    else:
+        return None
+
+def get_profile_path(username):
+    PROFILE_DIR.mkdir(parents=True, exist_ok=True)
+    return PROFILE_DIR / f"{username}.json"
 
 def get_user_profile(username):
-    profile_path = ensure_user_profile(username)
-    try:
-        with open(profile_path, "r") as f:
-            return json.load(f)
-    except Exception:
-        # Auto repair: if corrupted, recreate
-        profile_path.unlink(missing_ok=True)
-        return get_user_profile(username)
-
-def update_user_profile(username, updates: dict):
-    profile = get_user_profile(username)
-    profile.update(updates)
-    profile["groups"] = list(get_system_groups(username))
-    with open(get_user_profile_path(username), "w") as f:
-        json.dump(profile, f)
-
-def set_user_theme(username, theme_key):
-    update_user_profile(username, {"theme": theme_key})
-
-def set_custom_theme(username, custom_theme: dict):
-    update_user_profile(username, {"custom_theme": custom_theme})
-
-def set_user_notifications(username, notifications):
-    update_user_profile(username, {"notifications": notifications})
-
-def set_user_email(username, email):
-    update_user_profile(username, {"email": email})
-
-def set_user_password(username, old_password, new_password):
-    # For host-based users, use PAM or system methods (not implemented here)
-    # For internal users, update the profile file (hashed)
-    # Here we provide a stub; recommend using PAM via python-pam for real use
-    if user_exists_on_system(username):
-        # Reject change, or use PAM for real
-        return {"success": False, "message": "Password changes for system users must be handled by the OS admin."}
-    # For internal users (not in /etc/passwd): (hash password)
-    profile = get_user_profile(username)
-    if "password" in profile:
-        hashed = hashlib.sha256(old_password.encode()).hexdigest()
-        if profile["password"] != hashed:
-            return {"success": False, "message": "Old password incorrect."}
-    profile["password"] = hashlib.sha256(new_password.encode()).hexdigest()
-    with open(get_user_profile_path(username), "w") as f:
-        json.dump(profile, f)
-    return {"success": True}
-
-def authenticate_user(username, password):
-    # Prefer PAM or host authentication for host users
-    if user_exists_on_system(username):
+    p = get_profile_path(username)
+    if p.exists():
         try:
-            import pam
-            p = pam.pam()
-            if p.authenticate(username, password):
-                return True
-            else:
-                return False
-        except ImportError:
-            return False
-    # Internal users (profile-based)
-    profile = get_user_profile(username)
-    if "password" in profile:
-        return profile["password"] == hashlib.sha256(password.encode()).hexdigest()
-    return False
+            with open(p, "r") as f:
+                return json.load(f)
+        except Exception:
+            # Corrupted profile, backup and create default
+            p.rename(str(p) + ".corrupt")
+    # Create a default profile if not found or corrupt
+    default = default_profile(username)
+    save_user_profile(username, default)
+    return default
 
-def create_internal_user(username, password, email=""):
-    if user_exists_on_system(username):
-        raise ValueError("Cannot create internal user that matches a system account.")
-    if not username.isalnum():
-        raise ValueError("Invalid username.")
-    profile_path = get_user_profile_path(username)
-    if profile_path.exists():
-        raise ValueError("User already exists.")
-    profile = {
+def save_user_profile(username, profile):
+    p = get_profile_path(username)
+    with open(p, "w") as f:
+        json.dump(profile, f, indent=2)
+
+def check_or_create_auto_profile(username):
+    """Creates a default profile for a valid system user if not present."""
+    p = get_profile_path(username)
+    if not p.exists():
+        profile = default_profile(username)
+        save_user_profile(username, profile)
+
+def default_profile(username):
+    return {
         "username": username,
+        "email": "",
+        "access": user_access_level(username),
         "theme": "dark",
-        "notifications": [],
-        "email": email,
-        "password": hashlib.sha256(password.encode()).hexdigest(),
+        "notify": {
+            "on_login": True,
+            "on_schedule": True,
+            "on_job_event": True,
+        },
         "custom_theme": {},
-        "groups": []
+        "contact_methods": []
     }
-    profile_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(profile_path, "w") as f:
-        json.dump(profile, f)
-    return True
 
-def auto_provision_system_user(username):
-    # On first login, auto-create user profile for host user
-    if not user_exists_on_system(username):
-        return False
-    ensure_user_profile(username)
-    return True
-
-def set_user_groups(username):
-    update_user_profile(username, {"groups": list(get_system_groups(username))})
-
-def is_authorized_for_cli(username):
-    groups = get_system_groups(username)
-    return bool(ALLOWED_GROUPS & groups)
-
-def get_theme_for_user(username):
-    profile = get_user_profile(username)
-    theme = profile.get("theme", "dark")
-    if theme == "custom" and "custom_theme" in profile:
-        return profile["custom_theme"]
-    return theme
+def can_create_web_user(username):
+    # Prevent creating web users that shadow UNIX users
+    return not user_exists_on_host(username)

@@ -1,56 +1,91 @@
-from flask import Blueprint, render_template, request, session, redirect, url_for, jsonify, flash
-from inetctl.core import user_profile
-from inetctl.theme import THEMES, list_theme_names
+from flask import Blueprint, render_template, request, redirect, url_for, flash, session, jsonify
+import getpass
+from inetctl.core.user import (
+    load_profile,
+    save_profile,
+    get_access_level,
+    prevent_duplicate_profile_creation,
+    pam_authenticate,
+    update_profile,
+    get_all_profiles,
+    auto_provision_profile,
+    PROFILE_DIR,
+    REQUIRED_GROUPS
+)
+from inetctl.theme import THEMES
 
-user_bp = Blueprint("user", __name__, url_prefix="/user")
+bp = Blueprint("user", __name__, url_prefix="/user")
 
-@user_bp.before_request
-def require_login():
-    if "username" not in session:
-        return redirect(url_for("auth.login"))
+def require_login(f):
+    from functools import wraps
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        if not session.get("username"):
+            return redirect(url_for("auth.login"))
+        return f(*args, **kwargs)
+    return wrapper
 
-@user_bp.route("/profile", methods=["GET", "POST"])
+@bp.route("/profile", methods=["GET", "POST"])
+@require_login
 def profile():
     username = session["username"]
-    profile = user_profile.load_user_profile(username)
-    themes = list_theme_names()
+    prof = load_profile(username) or auto_provision_profile(username)
+    if not prof:
+        flash("User profile not found or not authorized", "danger")
+        return redirect(url_for("auth.login"))
     if request.method == "POST":
-        # User submitted profile update
         updates = {}
-        email = request.form.get("email", "")
-        theme = request.form.get("theme", "dark")
-        # Notification options (checkboxes)
-        notification_options = {
-            "system": bool(request.form.get("notif_system")),
-            "jobs": bool(request.form.get("notif_jobs")),
-            "warnings": bool(request.form.get("notif_warnings")),
-            "critical": bool(request.form.get("notif_critical"))
-        }
-        updates["email"] = email
-        updates["theme"] = theme
-        updates["notification_options"] = notification_options
-        user_profile.update_user_profile(username, updates)
-        flash("Profile updated!", "success")
+        if "theme" in request.form and request.form["theme"] in THEMES:
+            updates["theme"] = request.form["theme"]
+        if "email" in request.form:
+            updates["email"] = request.form["email"]
+        if "notify_on_login" in request.form:
+            updates.setdefault("notify", {})["on_login"] = bool(request.form.get("notify_on_login"))
+        if "notify_on_schedule" in request.form:
+            updates.setdefault("notify", {})["on_schedule"] = bool(request.form.get("notify_on_schedule"))
+        if "notify_on_job_event" in request.form:
+            updates.setdefault("notify", {})["on_job_event"] = bool(request.form.get("notify_on_job_event"))
+        # Only update access_level if user is admin
+        if session.get("access_level") == "admin" and "access_level" in request.form:
+            updates["access_level"] = request.form["access_level"]
+        update_profile(username, updates)
+        flash("Profile updated.", "success")
         return redirect(url_for("user.profile"))
-    return render_template("user_profile.html",
-                           profile=profile,
-                           themes=themes)
+    return render_template(
+        "user_profile.html",
+        profile=prof,
+        themes=THEMES,
+        access_level=get_access_level(username),
+        group_names=REQUIRED_GROUPS
+    )
 
-@user_bp.route("/theme", methods=["POST"])
-def change_theme():
-    # For AJAX theme change
+@bp.route("/all")
+@require_login
+def all_profiles():
+    # Only admins can see all
+    if session.get("access_level") != "admin":
+        flash("Not authorized", "danger")
+        return redirect(url_for("user.profile"))
+    profiles = get_all_profiles()
+    return render_template("user_list.html", profiles=profiles)
+
+@bp.route("/set_theme", methods=["POST"])
+@require_login
+def set_theme():
+    theme = request.form.get("theme")
     username = session["username"]
-    theme = request.json.get("theme")
-    if theme and theme in THEMES:
-        user_profile.update_user_profile(username, {"theme": theme})
-        return jsonify({"success": True, "theme": theme})
-    return jsonify({"success": False, "error": "Invalid theme"})
+    if theme in THEMES:
+        update_profile(username, {"theme": theme})
+        flash("Theme updated!", "success")
+    else:
+        flash("Invalid theme.", "danger")
+    return redirect(url_for("user.profile"))
 
-@user_bp.route("/api/list", methods=["GET"])
-def list_profiles_api():
-    # Admin only: List all profiles
+@bp.route("/contact", methods=["POST"])
+@require_login
+def update_contact():
     username = session["username"]
-    if user_profile.get_user_access_level(username) != "admin":
-        return jsonify({"error": "Unauthorized"}), 403
-    return jsonify({"profiles": user_profile.list_profiles()})
-
+    methods = request.form.getlist("contact_methods")
+    update_profile(username, {"contact_methods": methods})
+    flash("Contact methods updated.", "success")
+    return redirect(url_for("user.profile"))

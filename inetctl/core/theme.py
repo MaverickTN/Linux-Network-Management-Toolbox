@@ -1,5 +1,7 @@
 # inetctl/core/theme.py
 
+import json
+
 THEMES = {
     "dark": {
         "name": "Dark",
@@ -194,37 +196,24 @@ THEMES = {
 }
 
 def get_theme(theme_key="dark"):
-    """Get the theme dict (fallback to dark)."""
     return THEMES.get(theme_key, THEMES["dark"])
 
 def list_theme_names():
-    """Get {key: display name} for all themes."""
     return {k: v["name"] for k, v in THEMES.items()}
 
 def theme_css_vars(theme_key="dark"):
-    """Return CSS :root { ... } for given theme (for <style> injection)."""
-    t = get_theme(theme_key)
-    css = [
-        f"--color-primary: {t['primary']};",
-        f"--color-background: {t['background']};",
-        f"--color-foreground: {t['foreground']};",
-        f"--color-accent: {t['accent']};",
-        f"--color-danger: {t['danger']};",
-        f"--color-success: {t['success']};",
-        f"--color-warning: {t['warning']};",
-        f"--color-info: {t['info']};",
-        f"--border-radius: {t.get('border-radius', '6px')};"
-    ]
-    return ":root {\n" + "\n".join("  " + line for line in css) + "\n}"
+    theme = get_theme(theme_key)
+    lines = []
+    for k, v in theme.items():
+        if isinstance(v, str) and k != "name":
+            lines.append(f"  --color-{k}: {v};")
+    return ":root {\n" + "\n".join(lines) + "\n}"
 
 def cli_color(text, style="primary", theme_key="dark"):
-    """Format CLI text with theme color."""
-    theme = get_theme(theme_key)
-    color = theme["cli"].get(style, "")
-    reset = theme["cli"]["reset"]
-    return f"{color}{text}{reset}"
+    color_code = THEMES.get(theme_key, THEMES["dark"])["cli"].get(style, "")
+    reset_code = THEMES.get(theme_key, THEMES["dark"])["cli"]["reset"]
+    return f"{color_code}{text}{reset_code}"
 
 def inject_theme_into_html(html, theme_key="dark"):
-    """Inject theme CSS into HTML templates (replace <!--THEME_VARS-->)."""
     css = theme_css_vars(theme_key)
     return html.replace("<!--THEME_VARS-->", f"<style>{css}</style>")

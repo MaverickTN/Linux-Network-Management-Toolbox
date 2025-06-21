@@ -1,102 +1,67 @@
-from datetime import time
-import json
+import datetime
+from inetctl.core.config_loader import load_config, save_config
 
-def load_hosts():
-    # Replace this with your actual loading logic
-    from inetctl.core.hosts import load_hosts as _load
-    return _load()
+def list_hosts_with_schedules():
+    config = load_config()
+    return list(config.get("schedules", {}).keys())
 
-def save_hosts():
-    # Replace this with your actual saving logic
-    from inetctl.core.hosts import save_hosts as _save
-    _save()
+def get_host_schedules(host):
+    config = load_config()
+    return config.get("schedules", {}).get(host, [])
 
-def get_schedule_blocks(host):
-    # Each host dict should have a 'schedules' key, which is a list of dicts {"start": "HH:MM", "end": "HH:MM"}
-    return host.get("schedules", [])
-
-def list_schedule_blocks(host):
-    return get_schedule_blocks(host)
-
-def validate_schedule_blocks(blocks):
-    # blocks: list of dicts with keys "start" and "end" as "HH:MM"
-    parsed = []
-    for blk in blocks:
-        try:
-            s = _parse_time(blk["start"])
-            e = _parse_time(blk["end"])
-        except Exception:
-            return False, "Invalid time format in block"
-        parsed.append((s, e))
-    # check for overlap
-    for i, (s1, e1) in enumerate(parsed):
-        for j, (s2, e2) in enumerate(parsed):
-            if i == j:
-                continue
-            if _blocks_overlap(s1, e1, s2, e2):
-                return False, f"Blocks {i} and {j} overlap"
+def validate_new_block(host, new_block):
+    """
+    Ensure new block does not overlap with existing for the host.
+    Returns (True/False, message)
+    """
+    blocks = get_host_schedules(host)
+    ns, ne = (
+        datetime.datetime.fromisoformat(new_block["start"]),
+        datetime.datetime.fromisoformat(new_block["end"])
+    )
+    for b in blocks:
+        bs = datetime.datetime.fromisoformat(b["start"])
+        be = datetime.datetime.fromisoformat(b["end"])
+        # Overlap if start < be and end > bs
+        if ns < be and ne > bs:
+            return False, f"Overlaps with block {bs} to {be}"
     return True, ""
 
-def add_schedule_block(host, start, end):
-    """
-    Adds a new schedule block. Prevents overlaps.
-    start/end: datetime.time objects
-    """
-    if start >= end:
-        return False, "End time must be after start time."
-    blocks = get_schedule_blocks(host)
-    new_block = {"start": start.strftime("%H:%M"), "end": end.strftime("%H:%M")}
-    # Check overlap with existing blocks
-    for idx, blk in enumerate(blocks):
-        s = _parse_time(blk["start"])
-        e = _parse_time(blk["end"])
-        if _blocks_overlap(start, end, s, e):
-            return False, f"Overlaps with block #{idx} ({blk['start']}-{blk['end']})"
-    # Add
-    blocks.append(new_block)
-    host["schedules"] = blocks
-    return True, "Block added."
+def add_schedule_block(host, block):
+    config = load_config()
+    schedules = config.setdefault("schedules", {})
+    host_blocks = schedules.setdefault(host, [])
+    host_blocks.append(block)
+    # Sort by start time
+    host_blocks.sort(key=lambda x: x["start"])
+    save_config(config)
 
-def remove_schedule_block(host, index):
-    blocks = get_schedule_blocks(host)
-    if not (0 <= index < len(blocks)):
-        return False
-    blocks.pop(index)
-    host["schedules"] = blocks
-    return True
-
-def _parse_time(ts: str) -> time:
-    h, m = map(int, ts.split(":"))
-    return time(h, m)
-
-def _blocks_overlap(s1, e1, s2, e2):
-    # Return True if [s1, e1) overlaps [s2, e2)
-    return max(s1, s2) < min(e1, e2)
-
-# ----- For Web Use -----
-def can_block_now(host, check_time=None):
-    """Returns True if host is scheduled to be blocked at current time."""
-    import datetime
-    now = check_time or datetime.datetime.now().time()
-    for blk in get_schedule_blocks(host):
-        s = _parse_time(blk["start"])
-        e = _parse_time(blk["end"])
-        if s < now < e:
-            return True
+def remove_schedule_block(host, idx):
+    config = load_config()
+    host_blocks = config.get("schedules", {}).get(host, [])
+    if 0 <= idx < len(host_blocks):
+        del host_blocks[idx]
+        save_config(config)
+        return True
     return False
 
-def get_next_block(host, check_time=None):
-    """Returns next scheduled block (start, end) after now."""
-    import datetime
-    now = check_time or datetime.datetime.now().time()
-    next_blk = None
-    min_delta = None
-    for blk in get_schedule_blocks(host):
-        s = _parse_time(blk["start"])
-        if s > now:
-            delta = (datetime.datetime.combine(datetime.date.today(), s) -
-                     datetime.datetime.combine(datetime.date.today(), now)).total_seconds()
-            if min_delta is None or delta < min_delta:
-                min_delta = delta
-                next_blk = blk
-    return next_blk
+def find_next_available_block(host, after_dt=None):
+    """
+    Suggests the next free time after 'after_dt' (datetime), returns (start, end) or None
+    """
+    blocks = get_host_schedules(host)
+    if not blocks:
+        return None
+    blocks = sorted(blocks, key=lambda b: b["start"])
+    if not after_dt:
+        after_dt = datetime.datetime.now()
+    for b in blocks:
+        bs = datetime.datetime.fromisoformat(b["start"])
+        if after_dt < bs:
+            return after_dt, bs
+        after_dt = max(after_dt, datetime.datetime.fromisoformat(b["end"]))
+    return (after_dt, None)
+
+def full_schedule_for_all_hosts():
+    config = load_config()
+    return config.get("schedules", {})

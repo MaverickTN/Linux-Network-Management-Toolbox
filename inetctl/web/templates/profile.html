@@ -1,49 +1,66 @@
+<!-- inetctl/web/templates/profile.html -->
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <title>User Profile - Linux Network Management Toolbox</title>
+    <meta charset="UTF-8">
+    <title>{{ title or "User Profile" }}</title>
     <!--THEME_VARS-->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+    <style>
+      .profile-card {
+        background: var(--color-background, #23272e);
+        color: var(--color-foreground, #e0e0e0);
+        border-radius: 14px;
+        box-shadow: 0 0 8px rgba(0,0,0,0.07);
+        padding: 2em 2em 1em 2em;
+        max-width: 440px;
+        margin: 2em auto;
+      }
+      h2 { text-align: center; }
+      label { font-weight: bold; }
+      .readonly { background: #eee; color: #999; }
+      .notify-box { display: flex; gap: 2em; margin-bottom: 1em; }
+    </style>
 </head>
 <body>
-<main class="container">
-    <h1>User Profile</h1>
-    {% with messages = get_flashed_messages(with_categories=true) %}
-      {% if messages %}
-        {% for category, message in messages %}
-          <div class="alert {{category}}">{{ message }}</div>
-        {% endfor %}
-      {% endif %}
-    {% endwith %}
-    <form method="POST">
-        <label for="email">Email Address</label>
-        <input name="email" id="email" value="{{ user.email or '' }}" type="email" placeholder="your@email.com">
+  <main>
+    <div class="profile-card">
+      <h2>User Profile</h2>
+      <form method="POST" action="">
+        <label>Username:</label>
+        <input type="text" class="readonly" value="{{ profile.username }}" readonly>
         
-        <label for="theme">Theme</label>
-        <select name="theme" id="theme">
-            {% for key, theme in all_themes.items() %}
-            <option value="{{key}}" {% if user.theme == key %}selected{% endif %}>{{ theme['name'] }}</option>
-            {% endfor %}
+        <label>Access Level:</label>
+        <input type="text" class="readonly" value="{{ profile.access_level | title }}" readonly>
+        
+        <label>Email:</label>
+        <input type="email" name="email" value="{{ profile.email or '' }}" autocomplete="off">
+        
+        <label>Theme:</label>
+        <select name="theme">
+          {% for k, theme in theme_choices.items() %}
+            <option value="{{ k }}" {% if profile.theme == k %}selected{% endif %}>{{ theme }}</option>
+          {% endfor %}
         </select>
-
-        <label for="notify_events">Notification Preferences</label>
-        <div>
-            {% for value, label in event_options %}
-            <label style="margin-right: 1em;">
-                <input type="checkbox" name="notify_events" value="{{value}}" {% if value in (user.notify_events or []) %}checked{% endif %}>
-                {{ label }}
-            </label>
-            {% endfor %}
+        
+        <label>Contact Methods:</label>
+        <input type="text" name="contact_methods" value="{{ profile.contact_methods | join(', ') }}" placeholder="e.g. email, sms, telegram">
+        <small>Comma separated. Used for critical notifications if set up.</small>
+        
+        <label>Notification Preferences:</label>
+        <div class="notify-box">
+          <label><input type="checkbox" name="notify_on_login" {% if profile.notify.on_login %}checked{% endif %}> Login</label>
+          <label><input type="checkbox" name="notify_on_schedule" {% if profile.notify.on_schedule %}checked{% endif %}> Schedule</label>
+          <label><input type="checkbox" name="notify_on_job_event" {% if profile.notify.on_job_event %}checked{% endif %}> Job Events</label>
         </div>
-
-        <button type="submit">Update Profile</button>
-    </form>
-
-    <hr>
-    <h3>Password Change</h3>
-    <p>
-        To change your password, please use the system's <code>passwd</code> command, or contact your administrator. For security reasons, password changes are handled through the OS (PAM authentication).
-    </p>
-</main>
+        
+        <button type="submit" style="margin-top:1.2em;">Update Profile</button>
+      </form>
+    </div>
+  </main>
+  <script>
+    // Optionally: add theme switching JS if needed for instant theme previews
+  </script>
 </body>
 </html>

@@ -1,0 +1,197 @@
+{% extends "base.html" %}
+{% block title %}Schedule Management - {{ portal_title }}{% endblock %}
+
+{% block content %}
+<div class="container" style="max-width: 800px; margin-top: 40px;">
+  <h2>Schedule Blocks for <span id="host-mac">{{ host_mac }}</span></h2>
+  <table class="table table-striped" id="schedule-table">
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Start</th>
+        <th>End</th>
+        <th style="width:140px;">Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for idx, block in enumerate(schedule_blocks) %}
+      <tr data-idx="{{ idx }}">
+        <td>{{ idx + 1 }}</td>
+        <td><span class="block-start" data-idx="{{ idx }}">{{ block.start }}</span></td>
+        <td><span class="block-end" data-idx="{{ idx }}">{{ block.end }}</span></td>
+        <td>
+          <button class="btn btn-sm btn-primary edit-btn" data-idx="{{ idx }}">Edit</button>
+          <button class="btn btn-sm btn-danger delete-btn" data-idx="{{ idx }}">Delete</button>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <button class="btn btn-success" id="add-block-btn"><i class="fa fa-plus"></i> Add Block</button>
+</div>
+
+<!-- Modal for add/edit block -->
+<div class="modal" tabindex="-1" id="block-modal">
+  <div class="modal-dialog">
+    <div class="modal-content" style="background: var(--color-background); color: var(--color-foreground);">
+      <div class="modal-header">
+        <h5 class="modal-title" id="block-modal-title">Add/Edit Block</h5>
+        <button type="button" class="close" id="modal-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <form id="block-form">
+          <div class="form-group">
+            <label for="block-start">Start Time (HH:MM)</label>
+            <input type="time" class="form-control" id="block-start" required>
+          </div>
+          <div class="form-group">
+            <label for="block-end">End Time (HH:MM)</label>
+            <input type="time" class="form-control" id="block-end" required>
+          </div>
+          <input type="hidden" id="edit-idx" value="">
+        </form>
+        <div id="overlap-warning" style="display:none; color: var(--color-danger); font-weight:bold;">Block overlaps with an existing one!</div>
+      </div>
+      <div class="modal-footer">
+        <button type="submit" form="block-form" class="btn btn-primary" id="modal-save">Save</button>
+        <button type="button" class="btn btn-secondary" id="modal-cancel">Cancel</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+let scheduleBlocks = {{ schedule_blocks | tojson }};
+const hostMac = "{{ host_mac }}";
+
+function minutes(str) {
+  const [h, m] = str.split(":").map(Number);
+  return h * 60 + m;
+}
+function blockOverlaps(start, end, skipIdx = null) {
+  let s = minutes(start), e = minutes(end);
+  for (let i = 0; i < scheduleBlocks.length; i++) {
+    if (skipIdx !== null && i === skipIdx) continue;
+    let b = scheduleBlocks[i];
+    let bs = minutes(b.start), be = minutes(b.end);
+    if (!(e <= bs || s >= be)) return true;
+  }
+  return false;
+}
+function refreshTable() {
+  let tbody = document.querySelector("#schedule-table tbody");
+  tbody.innerHTML = "";
+  scheduleBlocks.forEach((block, idx) => {
+    let row = document.createElement("tr");
+    row.dataset.idx = idx;
+    row.innerHTML = `
+      <td>${idx + 1}</td>
+      <td><span class="block-start" data-idx="${idx}">${block.start}</span></td>
+      <td><span class="block-end" data-idx="${idx}">${block.end}</span></td>
+      <td>
+        <button class="btn btn-sm btn-primary edit-btn" data-idx="${idx}">Edit</button>
+        <button class="btn btn-sm btn-danger delete-btn" data-idx="${idx}">Delete</button>
+      </td>
+    `;
+    tbody.appendChild(row);
+  });
+}
+function showModal(title, block = null, idx = null) {
+  document.getElementById("block-modal-title").textContent = title;
+  document.getElementById("block-start").value = block ? block.start : "";
+  document.getElementById("block-end").value = block ? block.end : "";
+  document.getElementById("edit-idx").value = idx !== null ? idx : "";
+  document.getElementById("overlap-warning").style.display = "none";
+  document.getElementById("block-modal").style.display = "block";
+}
+function hideModal() {
+  document.getElementById("block-modal").style.display = "none";
+}
+document.addEventListener("DOMContentLoaded", function() {
+  refreshTable();
+  document.getElementById("add-block-btn").onclick = () => showModal("Add Block");
+  document.getElementById("modal-close").onclick = hideModal;
+  document.getElementById("modal-cancel").onclick = hideModal;
+
+  document.body.addEventListener("click", function(e) {
+    if (e.target.classList.contains("edit-btn")) {
+      let idx = +e.target.dataset.idx;
+      showModal("Edit Block", scheduleBlocks[idx], idx);
+    }
+    if (e.target.classList.contains("delete-btn")) {
+      let idx = +e.target.dataset.idx;
+      if (confirm("Delete this block?")) {
+        fetch(`/api/schedule/${hostMac}/remove`, {
+          method: "POST",
+          headers: {"Content-Type":"application/json"},
+          body: JSON.stringify({ idx })
+        })
+        .then(res => res.json())
+        .then(data => {
+          if (data.success) {
+            scheduleBlocks.splice(idx, 1);
+            refreshTable();
+          } else {
+            alert(data.error || "Error deleting block.");
+          }
+        });
+      }
+    }
+  });
+
+  // Add/edit form logic
+  document.getElementById("block-form").onsubmit = function(e) {
+    e.preventDefault();
+    let start = document.getElementById("block-start").value;
+    let end = document.getElementById("block-end").value;
+    let idxStr = document.getElementById("edit-idx").value;
+    let idx = idxStr ? +idxStr : null;
+    if (!start || !end || start >= end) {
+      document.getElementById("overlap-warning").textContent = "Invalid block times!";
+      document.getElementById("overlap-warning").style.display = "block";
+      return false;
+    }
+    if (blockOverlaps(start, end, idx)) {
+      document.getElementById("overlap-warning").textContent = "Block overlaps with an existing one!";
+      document.getElementById("overlap-warning").style.display = "block";
+      return false;
+    }
+    let endpoint = idx === null ? "add" : "update";
+    fetch(`/api/schedule/${hostMac}/${endpoint}`, {
+      method: "POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({ idx, start, end })
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (data.success) {
+        if (idx === null) {
+          scheduleBlocks.push({start, end});
+        } else {
+          scheduleBlocks[idx] = {start, end};
+        }
+        refreshTable();
+        hideModal();
+      } else {
+        document.getElementById("overlap-warning").textContent = data.error || "Error saving block!";
+        document.getElementById("overlap-warning").style.display = "block";
+      }
+    });
+    return false;
+  };
+
+  // Modal close on outside click
+  window.onclick = function(e) {
+    if (e.target === document.getElementById("block-modal")) hideModal();
+  };
+});
+</script>
+
+<style>
+.modal {
+  display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%;
+  overflow: auto; background: rgba(0,0,0,0.5);
+}
+.modal-dialog { margin: 5% auto; }
+</style>
+{% endblock %}

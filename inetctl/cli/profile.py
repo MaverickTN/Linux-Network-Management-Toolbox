@@ -1,131 +1,149 @@
+# inetctl/cli/profile.py
+
 import typer
-from pathlib import Path
+import os
 import getpass
-import pwd
-import grp
-from inetctl.core import profile as profile_core
-from inetctl.theme import list_theme_names
+from inetctl.core.user_profile import (
+    get_user_profile,
+    update_user_profile,
+    get_theme_names,
+)
+from inetctl.core.auth import check_user_group, current_cli_user, LNMT_GROUPS
+from inetctl.theme import cli_color
 
-cli = typer.Typer(help="Manage user profiles and preferences.")
+app = typer.Typer(
+    name="profile",
+    help="Manage your Linux Network Management Toolbox user profile.",
+    no_args_is_help=True,
+)
 
-def _require_host_user(username):
-    """Raise if username does not exist on the host."""
-    try:
-        pwd.getpwnam(username)
-    except KeyError:
-        typer.echo(typer.style(f"User '{username}' does not exist on this system.", fg=typer.colors.RED), err=True)
+def ensure_group_access():
+    user = current_cli_user()
+    group = check_user_group(user)
+    if group not in LNMT_GROUPS:
+        typer.secho("You do not have permission to access the profile CLI. Membership in lnmtadm, lnmt, or lnmtv required.", fg=typer.colors.RED)
         raise typer.Exit(1)
 
-def _check_group_access(username, allowed=("lnmtadm", "lnmt", "lnmtv")):
-    """Return access_level or exit."""
-    groups = [g.gr_name for g in grp.getgrall() if username in g.gr_mem]
-    # Primary group also matters
-    try:
-        primary_gid = pwd.getpwnam(username).pw_gid
-        primary_group = grp.getgrgid(primary_gid).gr_name
-        if primary_group not in groups:
-            groups.append(primary_group)
-    except Exception:
-        pass
-    for level, group in (("admin", "lnmtadm"), ("operator", "lnmt"), ("viewer", "lnmtv")):
-        if group in groups:
-            return level
-    typer.echo(typer.style("User does not have LNMT CLI permissions.", fg=typer.colors.RED), err=True)
-    raise typer.Exit(1)
+@app.command("show")
+def show_profile():
+    """Show current user's profile."""
+    ensure_group_access()
+    profile = get_user_profile(current_cli_user())
+    typer.echo(cli_color(f"\nUser Profile for {profile['username']}\n", "primary", profile.get("theme", "dark")))
+    for k, v in profile.items():
+        if k == "notification_settings":
+            typer.echo(cli_color("Notifications:", "info", profile.get("theme", "dark")))
+            for event, enabled in v.items():
+                typer.echo(f"  {event}: {'Enabled' if enabled else 'Disabled'}")
+        else:
+            typer.echo(f"{k}: {v}")
 
-@cli.command()
-def list_users():
-    """List all profiles (local only)."""
-    users = profile_core.list_user_profiles()
-    if not users:
-        typer.echo("No user profiles found.")
-        raise typer.Exit()
-    typer.echo("User profiles:")
-    for u in users:
-        typer.echo(f"- {u}")
-
-@cli.command()
-def show(username: str = typer.Argument(..., help="Username to display")):
-    """Show user profile data."""
-    _require_host_user(username)
-    profile = profile_core.get_user_profile(username)
-    typer.echo(profile)
-
-@cli.command()
-def create(
-    username: str = typer.Argument(..., help="Host system username"),
-    email: str = typer.Option("", help="User's email"),
-    display_name: str = typer.Option("", help="Display name"),
-    theme: str = typer.Option("dark", help="Theme"),
+@app.command("set-theme")
+def set_theme(
+    theme: str = typer.Option(..., prompt=True, help="Theme key to use. Run 'profile list-themes' to see available.")
 ):
-    """Create a new user profile for a system user."""
-    _require_host_user(username)
-    if profile_core.user_profile_exists(username):
-        typer.echo(f"Profile already exists for {username}")
+    """Set CLI and web theme for your profile."""
+    ensure_group_access()
+    profile = get_user_profile(current_cli_user())
+    all_themes = get_theme_names()
+    if theme not in all_themes:
+        typer.echo(cli_color(f"Theme '{theme}' is not available. Choose from: {', '.join(all_themes)}", "danger", profile.get("theme", "dark")))
         raise typer.Exit(1)
-    level = _check_group_access(username)
-    profile_core.create_user_profile(
-        username=username,
-        email=email,
-        display_name=display_name,
-        theme=theme,
-        access_level=level
-    )
-    typer.echo(f"Created profile for {username} (access: {level})")
+    update_user_profile(profile['username'], {"theme": theme})
+    typer.echo(cli_color(f"Theme changed to {all_themes[theme]}.", "success", theme))
 
-@cli.command()
-def update(
-    username: str = typer.Argument(..., help="Username to update"),
-    theme: str = typer.Option(None, help="Theme"),
-    email: str = typer.Option(None, help="Email"),
-    display_name: str = typer.Option(None, help="Display name"),
-    notif_network: bool = typer.Option(None, help="Network event notifications"),
-    notif_config: bool = typer.Option(None, help="Config change notifications"),
-    notif_security: bool = typer.Option(None, help="Security alert notifications"),
-    notif_schedule: bool = typer.Option(None, help="Schedule reminders"),
+@app.command("set-notifications")
+def set_notifications(
+    event: str = typer.Option(..., help="Event key (e.g., 'job_complete')"),
+    enabled: bool = typer.Option(..., help="Enable (True) or disable (False)")
 ):
-    """Update fields in a user's profile."""
-    _require_host_user(username)
-    updates = {}
-    if theme: updates["theme"] = theme
-    if email: updates["email"] = email
-    if display_name: updates["display_name"] = display_name
-    notif_updates = {}
-    if notif_network is not None: notif_updates["network_events"] = notif_network
-    if notif_config is not None: notif_updates["config_changes"] = notif_config
-    if notif_security is not None: notif_updates["security_alerts"] = notif_security
-    if notif_schedule is not None: notif_updates["schedule_reminders"] = notif_schedule
-    if notif_updates:
-        current = profile_core.get_user_profile(username)
-        merged = current.get("notifications", {})
-        merged.update(notif_updates)
-        updates["notifications"] = merged
-    if updates:
-        profile_core.update_user_profile(username, updates)
-        typer.echo(f"Profile updated for {username}")
+    """Enable or disable notification for a specific event."""
+    ensure_group_access()
+    profile = get_user_profile(current_cli_user())
+    notifications = profile.get("notification_settings", {})
+    if event not in notifications:
+        typer.echo(cli_color(f"Unknown event '{event}'.", "danger", profile.get("theme", "dark")))
+        raise typer.Exit(1)
+    notifications[event] = enabled
+    update_user_profile(profile['username'], {"notification_settings": notifications})
+    typer.echo(cli_color(f"Notification for '{event}' set to {'Enabled' if enabled else 'Disabled'}.", "success", profile.get("theme", "dark")))
+
+@app.command("change-password")
+def change_password():
+    """Change your account password (will use PAM if available)."""
+    ensure_group_access()
+    profile = get_user_profile(current_cli_user())
+    pw1 = getpass.getpass("Enter new password: ")
+    pw2 = getpass.getpass("Confirm new password: ")
+    if pw1 != pw2:
+        typer.echo(cli_color("Passwords do not match.", "danger", profile.get("theme", "dark")))
+        raise typer.Exit(1)
+    result = update_user_profile(profile['username'], {"new_password": pw1})
+    if result.get("success"):
+        typer.echo(cli_color("Password updated successfully.", "success", profile.get("theme", "dark")))
     else:
-        typer.echo("No updates specified.")
+        typer.echo(cli_color(f"Password update failed: {result.get('message')}", "danger", profile.get("theme", "dark")))
 
-@cli.command()
-def themes():
-    """List available themes."""
-    themes = list_theme_names()
-    for key, name in themes.items():
-        typer.echo(f"{key}: {name}")
+@app.command("set-email")
+def set_email(
+    email: str = typer.Option(..., prompt=True, help="Email address for notifications")
+):
+    """Set or update your email address."""
+    ensure_group_access()
+    profile = get_user_profile(current_cli_user())
+    result = update_user_profile(profile['username'], {"email": email})
+    if result.get("success"):
+        typer.echo(cli_color("Email updated.", "success", profile.get("theme", "dark")))
+    else:
+        typer.echo(cli_color("Failed to update email.", "danger", profile.get("theme", "dark")))
 
-@cli.command()
-def autogen():
-    """Auto-create all missing user profiles for host users in required groups."""
-    users_added = 0
-    for group, level in [("lnmtadm", "admin"), ("lnmt", "operator"), ("lnmtv", "viewer")]:
-        try:
-            members = grp.getgrnam(group).gr_mem
-            for u in members:
-                if not profile_core.user_profile_exists(u):
-                    profile_core.create_user_profile(u, access_level=level)
-                    typer.echo(f"Created profile for {u} (from group {group})")
-                    users_added += 1
-        except KeyError:
-            continue
-    typer.echo(f"Auto-generated {users_added} user profiles.")
+@app.command("list-themes")
+def list_themes():
+    """Show all available theme keys and names."""
+    ensure_group_access()
+    themes = get_theme_names()
+    typer.echo(cli_color("\nAvailable Themes:", "primary"))
+    for k, v in themes.items():
+        typer.echo(f"  {k}: {v}")
 
+# Menu mode
+@app.command("menu")
+def menu():
+    """Menu-driven profile editor."""
+    ensure_group_access()
+    profile = get_user_profile(current_cli_user())
+    theme = profile.get("theme", "dark")
+    while True:
+        typer.echo(cli_color("\n--- User Profile Menu ---", "primary", theme))
+        typer.echo("1. Show Profile")
+        typer.echo("2. Change Theme")
+        typer.echo("3. Change Password")
+        typer.echo("4. Set Email")
+        typer.echo("5. Set Notification")
+        typer.echo("6. List Themes")
+        typer.echo("0. Exit")
+        choice = typer.prompt("Select an option")
+        if choice == "1":
+            show_profile()
+        elif choice == "2":
+            list_themes()
+            t = typer.prompt("Enter theme key")
+            set_theme(t)
+        elif choice == "3":
+            change_password()
+        elif choice == "4":
+            e = typer.prompt("Enter new email")
+            set_email(e)
+        elif choice == "5":
+            ev = typer.prompt("Enter event name (e.g., job_complete)")
+            en = typer.confirm("Enable?")
+            set_notifications(ev, en)
+        elif choice == "6":
+            list_themes()
+        elif choice == "0":
+            break
+        else:
+            typer.echo(cli_color("Invalid option.", "danger", theme))
+
+if __name__ == "__main__":
+    app()

@@ -1,59 +1,105 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, render_template, request, jsonify
 from flask_login import login_required, current_user
-from inetctl.core import schedule
-from inetctl.job_queue_service import queue_job
-from inetctl.web.utils import log_web_event
+from inetctl.core.config_loader import load_config, save_config
+from inetctl.core.user import require_web_group
+from inetctl.core.logging import log_event
+from inetctl.web.utils import toast_notify
 
-bp = Blueprint("schedule", __name__, url_prefix="/api/schedule")
+bp = Blueprint("schedule", __name__, url_prefix="/schedule")
 
-@bp.route("/<mac>", methods=["GET"])
+def _get_host(mac):
+    config = load_config()
+    for host in config.get("known_hosts", []):
+        if host.get("mac") == mac:
+            return host, config
+    return None, config
+
+def _overlaps(blocks, start, end, skip_idx=None):
+    s = int(start[:2])*60 + int(start[3:])
+    e = int(end[:2])*60 + int(end[3:])
+    for idx, blk in enumerate(blocks):
+        if skip_idx is not None and idx == skip_idx:
+            continue
+        bs = int(blk["start"][:2])*60 + int(blk["start"][3:])
+        be = int(blk["end"][:2])*60 + int(blk["end"][3:])
+        if not (e <= bs or s >= be):
+            return True
+    return False
+
+@bp.route("/<mac>")
 @login_required
-def get_host_schedules(mac):
-    blocks = schedule.list_schedules(mac)
+@require_web_group(['lnmtadm', 'lnmt', 'lnmtv'])
+def manage(mac):
+    host, _ = _get_host(mac)
+    if not host:
+        toast_notify("Host not found.", "danger")
+        return render_template("not_found.html")
+    return render_template("schedule_manage.html", host=host)
+
+@bp.route("/api/list", methods=["POST"])
+@login_required
+@require_web_group(['lnmtadm', 'lnmt', 'lnmtv'])
+def list_blocks():
+    mac = request.json.get("mac")
+    host, _ = _get_host(mac)
+    if not host:
+        return jsonify({"error": "Host not found."}), 404
+    blocks = host.setdefault("schedules", [])
     return jsonify({"blocks": blocks})
 
-@bp.route("/<mac>/add", methods=["POST"])
+@bp.route("/api/add", methods=["POST"])
 @login_required
-def add_schedule_block(mac):
+@require_web_group(['lnmtadm', 'lnmt'])
+def add_block():
     data = request.json
-    # Data must contain: start, end, days, comment
-    block = {
-        "start": data.get("start"),
-        "end": data.get("end"),
-        "days": data.get("days"),
-        "comment": data.get("comment", "")
-    }
-    def do_add():
-        new_block = schedule.add_schedule(mac, block["start"], block["end"], block["days"], block["comment"])
-        log_web_event(current_user.username, f"Added schedule for {mac}: {schedule.describe_block(new_block)}")
-        return new_block
+    mac, start, end = data["mac"], data["start"], data["end"]
+    host, config = _get_host(mac)
+    if not host:
+        return jsonify({"error": "Host not found."}), 404
+    blocks = host.setdefault("schedules", [])
+    if start >= end:
+        return jsonify({"error": "Start must be before end."}), 400
+    if _overlaps(blocks, start, end):
+        return jsonify({"error": "Block overlaps."}), 409
+    blocks.append({"start": start, "end": end})
+    save_config(config)
+    log_event(current_user.username, f"Web: Added schedule {start}-{end} to {mac}")
+    return jsonify({"success": True})
 
-    job = queue_job("Add schedule block", do_add)
-    return jsonify({"queued": True, "job_id": job.id, "desc": f"Scheduling block for {mac} queued"})
-
-@bp.route("/<mac>/<int:block_idx>", methods=["DELETE"])
+@bp.route("/api/update", methods=["POST"])
 @login_required
-def remove_schedule_block(mac, block_idx):
-    def do_remove():
-        removed = schedule.remove_schedule(mac, block_idx)
-        log_web_event(current_user.username, f"Removed schedule for {mac}: {schedule.describe_block(removed)}")
-        return removed
-
-    job = queue_job("Remove schedule block", do_remove)
-    return jsonify({"queued": True, "job_id": job.id})
-
-@bp.route("/<mac>/<int:block_idx>", methods=["PATCH"])
-@login_required
-def update_schedule_block(mac, block_idx):
+@require_web_group(['lnmtadm', 'lnmt'])
+def update_block():
     data = request.json
-    def do_update():
-        old, new = schedule.update_schedule(
-            mac, block_idx,
-            data.get("start"), data.get("end"),
-            data.get("days"), data.get("comment")
-        )
-        log_web_event(current_user.username, f"Updated schedule for {mac}: {schedule.describe_block(new)}")
-        return new
+    mac, idx, start, end = data["mac"], int(data["idx"]), data["start"], data["end"]
+    host, config = _get_host(mac)
+    if not host:
+        return jsonify({"error": "Host not found."}), 404
+    blocks = host.setdefault("schedules", [])
+    if not (0 <= idx < len(blocks)):
+        return jsonify({"error": "Invalid block index."}), 400
+    if start >= end:
+        return jsonify({"error": "Start must be before end."}), 400
+    if _overlaps(blocks, start, end, skip_idx=idx):
+        return jsonify({"error": "Block overlaps."}), 409
+    blocks[idx] = {"start": start, "end": end}
+    save_config(config)
+    log_event(current_user.username, f"Web: Updated schedule {start}-{end} for {mac}")
+    return jsonify({"success": True})
 
-    job = queue_job("Update schedule block", do_update)
-    return jsonify({"queued": True, "job_id": job.id})
+@bp.route("/api/remove", methods=["POST"])
+@login_required
+@require_web_group(['lnmtadm', 'lnmt'])
+def remove_block():
+    data = request.json
+    mac, idx = data["mac"], int(data["idx"])
+    host, config = _get_host(mac)
+    if not host:
+        return jsonify({"error": "Host not found."}), 404
+    blocks = host.setdefault("schedules", [])
+    if not (0 <= idx < len(blocks)):
+        return jsonify({"error": "Invalid block index."}), 400
+    removed = blocks.pop(idx)
+    save_config(config)
+    log_event(current_user.username, f"Web: Removed schedule {removed['start']}-{removed['end']} from {mac}")
+    return jsonify({"success": True})

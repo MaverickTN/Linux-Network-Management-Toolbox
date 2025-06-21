@@ -3,76 +3,90 @@
 import os
 import pwd
 import grp
-import getpass
 import pam
-import logging
+from functools import wraps
+from flask import session, redirect, url_for, flash, g
+
+from inetctl.theme import get_cli_theme_for_group
 
 LNMT_GROUPS = {
-    "lnmtadm": "admin",
-    "lnmt": "operator",
-    "lnmtv": "view"
+    "admin": "lnmtadm",
+    "operator": "lnmt",
+    "view": "lnmtv",
 }
 
-def user_exists(username):
+def user_in_group(user, group):
     try:
-        pwd.getpwnam(username)
-        return True
+        groups = [g.gr_name for g in grp.getgrall() if user in g.gr_mem]
+        # Also check primary group
+        user_entry = pwd.getpwnam(user)
+        groups.append(grp.getgrgid(user_entry.pw_gid).gr_name)
+        return group in groups
     except KeyError:
         return False
 
-def user_group(username):
-    """Return lnmt group role for this user, or None if not in a valid group."""
-    groups = [g.gr_name for g in grp.getgrall() if username in g.gr_mem]
+def get_user_groups(user):
     try:
-        primary = grp.getgrgid(pwd.getpwnam(username).pw_gid).gr_name
-        if primary not in groups:
-            groups.append(primary)
-    except Exception:
-        pass
-    for group in LNMT_GROUPS:
-        if group in groups:
-            return LNMT_GROUPS[group]
-    return None
+        groups = [g.gr_name for g in grp.getgrall() if user in g.gr_mem]
+        user_entry = pwd.getpwnam(user)
+        groups.append(grp.getgrgid(user_entry.pw_gid).gr_name)
+        return set(groups)
+    except KeyError:
+        return set()
 
 def pam_authenticate(username, password):
-    p = pam.pam()
-    return p.authenticate(username, password)
+    """Authenticate user via PAM (Pluggable Authentication Modules)."""
+    pam_auth = pam.pam()
+    return pam_auth.authenticate(username, password)
 
-def cli_authenticate(required_level="view", as_user=None):
-    """
-    Check the effective user/group.
-    If as_user is given, only allow if current user is root.
-    Returns (user, role) if allowed, else exits.
-    """
-    real_user = getpass.getuser()
-    target_user = as_user or real_user
+def auto_create_profile(username):
+    """Create a profile if the username matches a host user in a valid group."""
+    try:
+        pwd.getpwnam(username)
+    except KeyError:
+        # Not a real system user
+        return False
+    groups = get_user_groups(username)
+    for group in LNMT_GROUPS.values():
+        if group in groups:
+            # Create a profile if not exists (simplified logic, e.g. in db or file)
+            # Here, just use session for example
+            session['user'] = {
+                "username": username,
+                "groups": list(groups),
+                "theme": get_cli_theme_for_group(groups),
+            }
+            return True
+    return False
 
-    if as_user and real_user != "root":
-        print("ERROR: Only root can use --as-user override.")
-        exit(1)
+def login_required(view):
+    @wraps(view)
+    def wrapped_view(*args, **kwargs):
+        if "user" not in session:
+            flash("Login required.", "danger")
+            return redirect(url_for('login'))
+        g.user = session["user"]
+        return view(*args, **kwargs)
+    return wrapped_view
 
-    if not user_exists(target_user):
-        print(f"Access denied: user '{target_user}' does not exist.")
-        exit(1)
-    role = user_group(target_user)
-    if not role:
-        print(f"Access denied: '{target_user}' is not in lnmtadm, lnmt, or lnmtv group.")
-        exit(1)
-    allowed = {
-        "admin": ["admin", "operator", "view"],
-        "operator": ["operator", "view"],
-        "view": ["view"]
-    }
-    # Map permission requirements
-    perm_map = {
-        "admin": 0,
-        "operator": 1,
-        "view": 2
-    }
-    if perm_map[role] > perm_map[required_level]:
-        print(f"Access denied: '{target_user}' does not have required permission '{required_level}'.")
-        exit(1)
-    # Optional: log all root user-impersonation
-    if as_user:
-        logging.info(f"Root is running as {as_user} ({role}) for this CLI session.")
-    return target_user, role
+def cli_user_allowed():
+    """Return (is_allowed, user, group_set, theme) for CLI context."""
+    try:
+        user = pwd.getpwuid(os.getuid()).pw_name
+        groups = get_user_groups(user)
+        # Must be in an allowed group
+        allowed = any(g in groups for g in LNMT_GROUPS.values())
+        theme = get_cli_theme_for_group(groups)
+        return allowed, user, groups, theme
+    except Exception:
+        return False, None, set(), "dark"
+
+def prevent_web_creation_of_host_users(username):
+    """Prevent creation of new web users that match system usernames."""
+    try:
+        pwd.getpwnam(username)
+        return False  # User exists on host, prevent creation
+    except KeyError:
+        return True
+
+# Optionally, more utility functions for SSO, MFA, etc. can be added here.

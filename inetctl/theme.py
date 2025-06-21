@@ -3,17 +3,15 @@
 THEMES = {
     "dark": {
         "name": "Dark",
-        "web": {
-            "primary": "#3498db",
-            "background": "#23272e",
-            "foreground": "#e0e0e0",
-            "accent": "#f39c12",
-            "danger": "#e74c3c",
-            "success": "#43a047",
-            "warning": "#ff9800",
-            "info": "#007bff",
-            "border-radius": "10px"
-        },
+        "primary": "#3498db",
+        "background": "#23272e",
+        "foreground": "#e0e0e0",
+        "accent": "#f39c12",
+        "danger": "#e74c3c",
+        "success": "#43a047",
+        "warning": "#ff9800",
+        "info": "#007bff",
+        "border-radius": "10px",
         "cli": {
             "primary": "\033[94m",
             "success": "\033[92m",
@@ -24,17 +22,15 @@ THEMES = {
     },
     "light": {
         "name": "Light",
-        "web": {
-            "primary": "#007bff",
-            "background": "#f5f6fa",
-            "foreground": "#222426",
-            "accent": "#39b385",
-            "danger": "#c0392b",
-            "success": "#388e3c",
-            "warning": "#ffb300",
-            "info": "#1565c0",
-            "border-radius": "10px"
-        },
+        "primary": "#007bff",
+        "background": "#f5f6fa",
+        "foreground": "#222426",
+        "accent": "#39b385",
+        "danger": "#c0392b",
+        "success": "#388e3c",
+        "warning": "#ffb300",
+        "info": "#1565c0",
+        "border-radius": "10px",
         "cli": {
             "primary": "\033[34m",
             "success": "\033[32m",
@@ -45,17 +41,15 @@ THEMES = {
     },
     "black": {
         "name": "Blackout",
-        "web": {
-            "primary": "#18ffff",
-            "background": "#000000",
-            "foreground": "#c7c7c7",
-            "accent": "#00bcd4",
-            "danger": "#ff1744",
-            "success": "#00e676",
-            "warning": "#ff9100",
-            "info": "#00b0ff",
-            "border-radius": "10px"
-        },
+        "primary": "#18ffff",
+        "background": "#000000",
+        "foreground": "#c7c7c7",
+        "accent": "#00bcd4",
+        "danger": "#ff1744",
+        "success": "#00e676",
+        "warning": "#ff9100",
+        "info": "#00b0ff",
+        "border-radius": "10px",
         "cli": {
             "primary": "\033[96m",
             "success": "\033[92m",
@@ -66,17 +60,15 @@ THEMES = {
     },
     "solarized": {
         "name": "Solarized",
-        "web": {
-            "primary": "#268bd2",
-            "background": "#002b36",
-            "foreground": "#93a1a1",
-            "accent": "#b58900",
-            "danger": "#dc322f",
-            "success": "#859900",
-            "warning": "#cb4b16",
-            "info": "#839496",
-            "border-radius": "10px"
-        },
+        "primary": "#268bd2",
+        "background": "#002b36",
+        "foreground": "#93a1a1",
+        "accent": "#b58900",
+        "danger": "#dc322f",
+        "success": "#859900",
+        "warning": "#cb4b16",
+        "info": "#839496",
+        "border-radius": "10px",
         "cli": {
             "primary": "\033[94m",
             "success": "\033[92m",
@@ -87,17 +79,15 @@ THEMES = {
     },
     "oceanic": {
         "name": "Oceanic",
-        "web": {
-            "primary": "#29b6f6",
-            "background": "#22313f",
-            "foreground": "#b0bec5",
-            "accent": "#ffd54f",
-            "danger": "#e53935",
-            "success": "#43a047",
-            "warning": "#ffa726",
-            "info": "#0288d1",
-            "border-radius": "10px"
-        },
+        "primary": "#29b6f6",
+        "background": "#22313f",
+        "foreground": "#b0bec5",
+        "accent": "#ffd54f",
+        "danger": "#e53935",
+        "success": "#43a047",
+        "warning": "#ffa726",
+        "info": "#0288d1",
+        "border-radius": "10px",
         "cli": {
             "primary": "\033[96m",
             "success": "\033[92m",
@@ -108,17 +98,15 @@ THEMES = {
     },
     "nord": {
         "name": "Nord",
-        "web": {
-            "primary": "#81A1C1",
-            "background": "#2E3440",
-            "foreground": "#D8DEE9",
-            "accent": "#A3BE8C",
-            "danger": "#BF616A",
-            "success": "#A3BE8C",
-            "warning": "#EBCB8B",
-            "info": "#5E81AC",
-            "border-radius": "10px"
-        },
+        "primary": "#81A1C1",
+        "background": "#2E3440",
+        "foreground": "#D8DEE9",
+        "accent": "#A3BE8C",
+        "danger": "#BF616A",
+        "success": "#A3BE8C",
+        "warning": "#EBCB8B",
+        "info": "#5E81AC",
+        "border-radius": "10px",
         "cli": {
             "primary": "\033[94m",
             "success": "\033[92m",
@@ -129,17 +117,15 @@ THEMES = {
     },
     "gruvbox": {
         "name": "Gruvbox",
-        "web": {
-            "primary": "#fabd2f",
-            "background": "#282828",
-            "foreground": "#ebdbb2",
-            "accent": "#b8bb26",
-            "danger": "#fb4934",
-            "success": "#b8bb26",
-            "warning": "#fe8019",
-            "info": "#83a598",
-            "border-radius": "10px"
-        },
+        "primary": "#fabd2f",
+        "background": "#282828",
+        "foreground": "#ebdbb2",
+        "accent": "#b8bb26",
+        "danger": "#fb4934",
+        "success": "#b8bb26",
+        "warning": "#fe8019",
+        "info": "#83a598",
+        "border-radius": "10px",
         "cli": {
             "primary": "\033[93m",
             "success": "\033[92m",
@@ -150,17 +136,15 @@ THEMES = {
     },
     "material": {
         "name": "Material",
-        "web": {
-            "primary": "#2196f3",
-            "background": "#263238",
-            "foreground": "#ececec",
-            "accent": "#ffeb3b",
-            "danger": "#e53935",
-            "success": "#43a047",
-            "warning": "#fbc02d",
-            "info": "#00bcd4",
-            "border-radius": "10px"
-        },
+        "primary": "#2196f3",
+        "background": "#263238",
+        "foreground": "#ececec",
+        "accent": "#ffeb3b",
+        "danger": "#e53935",
+        "success": "#43a047",
+        "warning": "#fbc02d",
+        "info": "#00bcd4",
+        "border-radius": "10px",
         "cli": {
             "primary": "\033[94m",
             "success": "\033[92m",
@@ -171,17 +155,15 @@ THEMES = {
     },
     "retro_terminal": {
         "name": "Retro Terminal",
-        "web": {
-            "primary": "#39FF14",
-            "background": "#1a1a1a",
-            "foreground": "#e0e0e0",
-            "accent": "#FFFF00",
-            "danger": "#FF3131",
-            "success": "#00FF41",
-            "warning": "#FFD700",
-            "info": "#00BFFF",
-            "border-radius": "0px"
-        },
+        "primary": "#39FF14",
+        "background": "#1a1a1a",
+        "foreground": "#e0e0e0",
+        "accent": "#FFFF00",
+        "danger": "#FF3131",
+        "success": "#00FF41",
+        "warning": "#FFD700",
+        "info": "#00BFFF",
+        "border-radius": "0px",
         "cli": {
             "primary": "\033[92m",
             "success": "\033[92m",
@@ -192,19 +174,36 @@ THEMES = {
     },
     "matrix": {
         "name": "Green Matrix",
-        "web": {
-            "primary": "#00ff41",
-            "background": "#101010",
-            "foreground": "#bada55",
-            "accent": "#00ff41",
-            "danger": "#ff1133",
-            "success": "#21f300",
-            "warning": "#ffea00",
-            "info": "#43d9ad",
-            "border-radius": "5px"
-        },
+        "primary": "#00ff41",
+        "background": "#101010",
+        "foreground": "#bada55",
+        "accent": "#00ff41",
+        "danger": "#ff1133",
+        "success": "#21f300",
+        "warning": "#ffea00",
+        "info": "#43d9ad",
+        "border-radius": "5px",
         "cli": {
             "primary": "\033[92m",
+            "success": "\033[92m",
+            "danger": "\033[91m",
+            "warning": "\033[93m",
+            "reset": "\033[0m"
+        }
+    },
+    "starbase": {
+        "name": "Starbase",
+        "primary": "#8be9fd",
+        "background": "#212c3b",
+        "foreground": "#e3e8ee",
+        "accent": "#50fa7b",
+        "danger": "#ff5555",
+        "success": "#50fa7b",
+        "warning": "#ffb86c",
+        "info": "#8be9fd",
+        "border-radius": "10px",
+        "cli": {
+            "primary": "\033[96m",
             "success": "\033[92m",
             "danger": "\033[91m",
             "warning": "\033[93m",
@@ -213,33 +212,47 @@ THEMES = {
     }
 }
 
-DEFAULT_THEME = "dark"
+# Group mapping for theme (adjust as needed)
+GROUP_THEME_DEFAULTS = {
+    "lnmtadm": "starbase",
+    "lnmt": "nord",
+    "lnmtv": "gruvbox",
+}
 
-def get_theme(theme_key=None):
-    """Return the full theme dictionary for a given key."""
-    if theme_key is None:
-        theme_key = DEFAULT_THEME
-    return THEMES.get(theme_key, THEMES[DEFAULT_THEME])
+def get_theme(theme_key="dark"):
+    return THEMES.get(theme_key, THEMES["dark"])
 
 def list_theme_names():
-    """Return a dict of theme_key: name for UI dropdowns."""
     return {k: v["name"] for k, v in THEMES.items()}
 
-def theme_css_vars(theme_key=None):
-    """Generate CSS :root variables for the selected web theme."""
-    theme = get_theme(theme_key)["web"]
-    return ":root {\n" + "\n".join([f"  --color-{k}: {v};" for k, v in theme.items()]) + "\n}"
+def theme_css_vars(theme_key="dark"):
+    theme = get_theme(theme_key)
+    css_vars = {
+        "primary": theme["primary"],
+        "background": theme["background"],
+        "foreground": theme["foreground"],
+        "accent": theme["accent"],
+        "danger": theme["danger"],
+        "success": theme["success"],
+        "warning": theme["warning"],
+        "info": theme["info"],
+        "border-radius": theme["border-radius"],
+    }
+    return ":root {\n" + "\n".join([f"  --color-{k}: {v};" for k, v in css_vars.items()]) + "\n}"
 
-def cli_color(text, style="primary", theme_key=None):
-    """Wrap text with the ANSI escape code for the given style and theme."""
-    cli = get_theme(theme_key)["cli"]
-    return f"{cli.get(style, '')}{text}{cli['reset']}"
+def cli_color(text, style="primary", theme_key="dark"):
+    theme = get_theme(theme_key)
+    color = theme['cli'].get(style, "")
+    reset = theme['cli'].get('reset', "")
+    return f"{color}{text}{reset}"
 
-def inject_theme_into_html(html, theme_key=None):
-    """Inject <style> with CSS variables into HTML template."""
+def inject_theme_into_html(html, theme_key="dark"):
     css = theme_css_vars(theme_key)
     return html.replace("<!--THEME_VARS-->", f"<style>{css}</style>")
 
-def available_themes():
-    """List all available theme keys."""
-    return list(THEMES.keys())
+def get_cli_theme_for_group(groups):
+    # Pass a set/list of group names, returns first match or default
+    for group in groups:
+        if group in GROUP_THEME_DEFAULTS:
+            return GROUP_THEME_DEFAULTS[group]
+    return "dark"

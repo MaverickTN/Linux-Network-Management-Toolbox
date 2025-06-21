@@ -1,128 +1,103 @@
 import typer
-from typing import List
-from inetctl.core import schedule
+from rich import print as rprint
+from rich.table import Table
+from inetctl.core.config_loader import load_config, save_config
+from inetctl.core.logging import log_event
+from inetctl.core.user import require_cli_group
 
-app = typer.Typer(
-    name="schedule",
-    help="Manage host blacklist/online schedules (multi-block per host, non-overlapping).",
-    no_args_is_help=True
-)
+cli = typer.Typer(name="schedule", help="Manage scheduled network access for hosts.")
 
-DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+def find_host(mac):
+    config = load_config()
+    for host in config.get("known_hosts", []):
+        if host.get("mac") == mac:
+            return host, config
+    return None, config
 
-@app.command("list")
-def list_schedules(mac: str = typer.Argument(None, help="MAC address of the host (optional, lists all if omitted)")):
-    """
-    List all scheduled blacklist/online blocks for a host, or all hosts.
-    """
-    data = schedule.list_schedules(mac)
-    if mac:
-        if not data:
-            typer.echo(f"No schedules found for {mac}")
-            raise typer.Exit()
-        typer.echo(f"Schedules for {mac}:")
-        for i, block in enumerate(data):
-            typer.echo(f"  [{i}] {schedule.describe_block(block)}")
-    else:
-        for mac, blocks in data.items():
-            typer.echo(f"{mac}:")
-            for i, block in enumerate(blocks):
-                typer.echo(f"  [{i}] {schedule.describe_block(block)}")
-    raise typer.Exit()
+def overlaps(blocks, start, end, skip_idx=None):
+    s = int(start[:2])*60 + int(start[3:])
+    e = int(end[:2])*60 + int(end[3:])
+    for idx, blk in enumerate(blocks):
+        if skip_idx is not None and idx == skip_idx:
+            continue
+        bs = int(blk["start"][:2])*60 + int(blk["start"][3:])
+        be = int(blk["end"][:2])*60 + int(blk["end"][3:])
+        if not (e <= bs or s >= be):
+            return True
+    return False
 
-@app.command("add")
-def add_block(
-    mac: str = typer.Argument(..., help="MAC address"),
-    start: str = typer.Option(None, "--start", "-s", help="Block start time, HH:MM"),
-    end: str = typer.Option(None, "--end", "-e", help="Block end time, HH:MM"),
-    days: List[str] = typer.Option([], "--day", "-d", help="Day(s) of week, e.g. --day Mon --day Tue"),
-    comment: str = typer.Option("", "--comment", "-c", help="Comment or label for this block"),
-):
-    """
-    Add a schedule block for a host.
-    """
-    # Interactive if not provided
-    if not start:
-        start = typer.prompt("Start time (HH:MM)")
-    if not end:
-        end = typer.prompt("End time (HH:MM)")
-    if not days:
-        typer.echo("Select days (comma-separated, e.g. Mon,Tue,Wed or 'all'):")
-        s = typer.prompt("Days")
-        if s.strip().lower() == "all":
-            days = DAYS
-        else:
-            days = [d.strip().capitalize()[:3] for d in s.split(",")]
-    block = schedule.add_schedule(mac, start, end, days, comment)
-    typer.secho(f"Added: {schedule.describe_block(block)}", fg=typer.colors.GREEN)
+@cli.command("list")
+@require_cli_group(["lnmtadm", "lnmt", "lnmtv"])
+def list_blocks(mac: str):
+    """List all schedule blocks for a host."""
+    host, _ = find_host(mac)
+    if not host:
+        rprint("[red]Host not found.[/red]")
+        raise typer.Exit(1)
+    table = Table("Index", "Start", "End")
+    for idx, blk in enumerate(host.get("schedules", [])):
+        table.add_row(str(idx), blk["start"], blk["end"])
+    rprint(table)
 
-@app.command("remove")
-def remove_block(
-    mac: str = typer.Argument(..., help="MAC address"),
-    idx: int = typer.Argument(None, help="Index of block to remove (from 'list')")
-):
-    """
-    Remove a schedule block by index.
-    """
-    if idx is None:
-        # List blocks and prompt
-        blocks = schedule.list_schedules(mac)
-        if not blocks:
-            typer.echo("No blocks for this host.")
-            raise typer.Exit()
-        for i, block in enumerate(blocks):
-            typer.echo(f"[{i}] {schedule.describe_block(block)}")
-        idx = typer.prompt("Index to remove", type=int)
-    removed = schedule.remove_schedule(mac, idx)
-    typer.secho(f"Removed: {schedule.describe_block(removed)}", fg=typer.colors.RED)
+@cli.command("add")
+@require_cli_group(["lnmtadm", "lnmt"])
+def add_block(mac: str, start: str = typer.Argument(..., help="Start time (HH:MM)"), end: str = typer.Argument(..., help="End time (HH:MM)")):
+    """Add a schedule block to a host."""
+    host, config = find_host(mac)
+    if not host:
+        rprint("[red]Host not found.[/red]")
+        raise typer.Exit(1)
+    blocks = host.setdefault("schedules", [])
+    if start >= end:
+        rprint("[red]Start must be before end.[/red]")
+        raise typer.Exit(1)
+    if overlaps(blocks, start, end):
+        rprint("[yellow]Block overlaps with an existing entry.[/yellow]")
+        raise typer.Exit(1)
+    blocks.append({"start": start, "end": end})
+    save_config(config)
+    log_event("cli", f"Added schedule {start}-{end} to {mac}")
+    rprint("[green]Block added successfully.[/green]")
 
-@app.command("update")
-def update_block(
-    mac: str = typer.Argument(..., help="MAC address"),
-    idx: int = typer.Argument(..., help="Index of block to update (from 'list')"),
-    start: str = typer.Option(None, "--start", "-s", help="New start time"),
-    end: str = typer.Option(None, "--end", "-e", help="New end time"),
-    days: List[str] = typer.Option(None, "--day", "-d", help="Day(s) of week, e.g. --day Fri"),
-    comment: str = typer.Option(None, "--comment", "-c", help="New comment"),
-):
-    """
-    Update a schedule block by index.
-    """
-    old, new = schedule.update_schedule(mac, idx, start, end, days, comment)
-    typer.secho(f"Updated block [{idx}]:", fg=typer.colors.GREEN)
-    typer.echo(f"Old: {schedule.describe_block(old)}")
-    typer.echo(f"New: {schedule.describe_block(new)}")
+@cli.command("edit")
+@require_cli_group(["lnmtadm", "lnmt"])
+def edit_block(mac: str, idx: int, start: str = typer.Option(None), end: str = typer.Option(None)):
+    """Edit an existing schedule block by index."""
+    host, config = find_host(mac)
+    if not host:
+        rprint("[red]Host not found.[/red]")
+        raise typer.Exit(1)
+    blocks = host.setdefault("schedules", [])
+    if not (0 <= idx < len(blocks)):
+        rprint("[red]Invalid block index.[/red]")
+        raise typer.Exit(1)
+    old = blocks[idx]
+    s = start or old["start"]
+    e = end or old["end"]
+    if s >= e:
+        rprint("[red]Start must be before end.[/red]")
+        raise typer.Exit(1)
+    if overlaps(blocks, s, e, skip_idx=idx):
+        rprint("[yellow]Block overlaps with an existing entry.[/yellow]")
+        raise typer.Exit(1)
+    blocks[idx] = {"start": s, "end": e}
+    save_config(config)
+    log_event("cli", f"Edited schedule {old['start']}-{old['end']} -> {s}-{e} for {mac}")
+    rprint("[green]Block updated successfully.[/green]")
 
-@app.command("menu")
-def interactive_menu():
-    """
-    Menu-driven scheduling for hosts.
-    """
-    while True:
-        typer.echo("\n--- Host Schedule Menu ---")
-        typer.echo("1) List all schedules")
-        typer.echo("2) Add block")
-        typer.echo("3) Remove block")
-        typer.echo("4) Update block")
-        typer.echo("0) Exit")
-        choice = typer.prompt("Select", type=int)
-        if choice == 0:
-            raise typer.Exit()
-        elif choice == 1:
-            mac = typer.prompt("MAC address (blank for all)", default="")
-            list_schedules(mac or None)
-        elif choice == 2:
-            mac = typer.prompt("MAC address")
-            add_block(mac)
-        elif choice == 3:
-            mac = typer.prompt("MAC address")
-            remove_block(mac)
-        elif choice == 4:
-            mac = typer.prompt("MAC address")
-            idx = typer.prompt("Block index", type=int)
-            update_block(mac, idx)
-        else:
-            typer.echo("Invalid.")
-
-if __name__ == "__main__":
-    app()
+@cli.command("remove")
+@require_cli_group(["lnmtadm", "lnmt"])
+def remove_block(mac: str, idx: int):
+    """Remove a schedule block by index."""
+    host, config = find_host(mac)
+    if not host:
+        rprint("[red]Host not found.[/red]")
+        raise typer.Exit(1)
+    blocks = host.setdefault("schedules", [])
+    if not (0 <= idx < len(blocks)):
+        rprint("[red]Invalid block index.[/red]")
+        raise typer.Exit(1)
+    removed = blocks.pop(idx)
+    save_config(config)
+    log_event("cli", f"Removed schedule {removed['start']}-{removed['end']} from {mac}")
+    rprint("[green]Block removed successfully.[/green]")

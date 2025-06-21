@@ -1,66 +1,64 @@
+# inetctl/web/auth.py
+
 import os
 from flask import Blueprint, render_template, request, redirect, url_for, session, flash
-from .models import db, UserProfile
-import pam  # python-pam library
+from pam import pam
+from inetctl.core.user_manager import (
+    user_exists_on_host,
+    user_can_access_cli,
+    user_access_level,
+    check_or_create_auto_profile,
+    get_user_profile,
+    save_user_profile,
+)
+from inetctl.theme import THEMES, get_theme
 
-auth_bp = Blueprint('auth', __name__)
+bp = Blueprint("auth", __name__, url_prefix="/auth")
 
-REQUIRED_GROUPS = {
-    "lnmtadm": "admin",
-    "lnmt": "operator",
-    "lnmtv": "view"
-}
+def pam_authenticate(username, password):
+    p = pam()
+    return p.authenticate(username, password)
 
-def get_user_role_from_groups(username):
-    """Determine the user's highest privilege role based on host group membership."""
-    import grp
-    user_groups = [g.gr_name for g in grp.getgrall() if username in g.gr_mem]
-    # Check by priority
-    for group, role in [("lnmtadm", "admin"), ("lnmt", "operator"), ("lnmtv", "view")]:
-        if group in user_groups:
-            return role
-    return None
-
-def system_user_exists(username):
-    """Check if the username exists on the system."""
-    import pwd
-    try:
-        pwd.getpwnam(username)
-        return True
-    except KeyError:
-        return False
-
-@auth_bp.route('/login', methods=['GET', 'POST'])
+@bp.route("/login", methods=["GET", "POST"])
 def login():
-    if request.method == 'POST':
-        username = request.form['username']
-        password = request.form['password']
-        # PAM authentication
-        p = pam.pam()
-        if p.authenticate(username, password):
-            if not system_user_exists(username):
-                flash("Invalid system user.", "danger")
-                return render_template("login.html")
-            role = get_user_role_from_groups(username)
-            if not role:
-                flash("User not a member of any LNMT group (lnmtadm, lnmt, lnmtv).", "danger")
-                return render_template("login.html")
-            # Auto-create user profile if needed
-            user = UserProfile.query.filter_by(username=username).first()
-            if not user:
-                user = UserProfile(username=username, role=role)
-                db.session.add(user)
-                db.session.commit()
-            session['username'] = username
-            session['role'] = role
-            flash(f"Welcome, {username}!", "success")
-            return redirect(url_for('main.index'))
-        else:
-            flash("Authentication failed.", "danger")
-    return render_template("login.html")
+    if request.method == "POST":
+        username = request.form["username"].strip()
+        password = request.form["password"]
 
-@auth_bp.route('/logout')
+        if not user_exists_on_host(username):
+            flash("Invalid username.", "danger")
+            return render_template("login.html", title="Login", theme=get_theme("dark"))
+
+        if pam_authenticate(username, password):
+            if not user_can_access_cli(username):
+                flash("Access denied: User not in permitted LNMT group.", "danger")
+                return render_template("login.html", title="Login", theme=get_theme("dark"))
+
+            # Create auto profile if not present
+            check_or_create_auto_profile(username)
+            session["username"] = username
+            flash("Login successful.", "success")
+            return redirect(url_for("home.index"))
+        else:
+            flash("Invalid credentials.", "danger")
+            return render_template("login.html", title="Login", theme=get_theme("dark"))
+    return render_template("login.html", title="Login", theme=get_theme("dark"))
+
+@bp.route("/logout")
 def logout():
-    session.clear()
+    session.pop("username", None)
     flash("Logged out.", "info")
-    return redirect(url_for('auth.login'))
+    return redirect(url_for("auth.login"))
+
+def get_logged_in_user():
+    return session.get("username", None)
+
+def require_login(f):
+    from functools import wraps
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        if not get_logged_in_user():
+            flash("Please log in to access this page.", "warning")
+            return redirect(url_for("auth.login"))
+        return f(*args, **kwargs)
+    return wrapper

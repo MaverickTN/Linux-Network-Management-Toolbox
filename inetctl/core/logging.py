@@ -1,95 +1,60 @@
 # inetctl/core/logging.py
 
-import logging
-import logging.handlers
-import os
-import threading
+import sys
 from datetime import datetime
+from pathlib import Path
 
-LOG_DIR = "/var/log/inetctl"
-LOG_FILE = "toolbox.log"
-MAX_BYTES = 5 * 1024 * 1024  # 5MB
-BACKUP_COUNT = 10
+from inetctl.theme import cli_color, get_theme
 
-if not os.path.exists(LOG_DIR):
-    try:
-        os.makedirs(LOG_DIR, exist_ok=True)
-    except Exception:
-        # fallback to local directory if permission denied
-        LOG_DIR = "."
+DEFAULT_LOGFILE = "/var/log/lnmt.log"
 
-_log_path = os.path.join(LOG_DIR, LOG_FILE)
+class LNMTLogger:
+    def __init__(self, logfile=DEFAULT_LOGFILE, theme="dark"):
+        self.logfile = Path(logfile)
+        self.theme = theme
 
-# Configure rotating file handler
-file_handler = logging.handlers.RotatingFileHandler(
-    _log_path, maxBytes=MAX_BYTES, backupCount=BACKUP_COUNT, encoding="utf-8"
-)
-formatter = logging.Formatter(
-    '%(asctime)s [%(levelname)s] %(threadName)s %(module)s:%(lineno)d: %(message)s'
-)
-file_handler.setFormatter(formatter)
+    def log(self, message, level="INFO", color="primary", to_stdout=True, step=None):
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        prefix = f"[{timestamp}] [{level}]"
+        if step:
+            prefix += f" [STEP: {step}]"
+        colored = cli_color(f"{prefix} {message}", color, self.theme)
 
-logger = logging.getLogger("inetctl")
-logger.setLevel(logging.INFO)
-logger.propagate = False
-if not logger.handlers:
-    logger.addHandler(file_handler)
-
-_log_lock = threading.Lock()
-_step_callbacks = []
-
-def log_event(message, level="info", **kwargs):
-    """Log an event with optional extra fields."""
-    level_map = {
-        "debug": logging.DEBUG,
-        "info": logging.INFO,
-        "success": logging.INFO,
-        "warning": logging.WARNING,
-        "error": logging.ERROR,
-        "critical": logging.CRITICAL
-    }
-    msg = f"{message} | {kwargs}" if kwargs else message
-    with _log_lock:
-        logger.log(level_map.get(level, logging.INFO), msg)
-    # Real-time broadcast to users (stub, for websocket or notification hook)
-    _broadcast_step({"message": message, "level": level, "timestamp": datetime.now().isoformat(), **kwargs})
-
-def log_step(step, job_id=None, user=None, level="info"):
-    """Log and broadcast a step in a multi-step operation."""
-    msg = f"Step: {step}"
-    if user:
-        msg += f" (user: {user})"
-    if job_id:
-        msg += f" [job:{job_id}]"
-    log_event(msg, level=level, step=step, user=user, job_id=job_id)
-
-def add_step_callback(callback):
-    """Register a function to receive step notifications (for WebSocket/Flask-SocketIO/etc)."""
-    _step_callbacks.append(callback)
-
-def _broadcast_step(step_obj):
-    """Broadcast step to all callbacks (real-time UI notification, etc)."""
-    for cb in _step_callbacks:
+        if to_stdout:
+            print(colored, file=sys.stdout if level != "ERROR" else sys.stderr)
+        # Always write to log file (uncolored)
         try:
-            cb(step_obj)
-        except Exception as ex:
-            logger.error(f"Step callback failed: {ex}")
+            self.logfile.parent.mkdir(parents=True, exist_ok=True)
+            with self.logfile.open("a") as f:
+                f.write(f"{prefix} {message}\n")
+        except Exception as e:
+            # Fail silently or print to stderr if desired
+            print(f"Logging error: {e}", file=sys.stderr)
 
-def get_recent_logs(limit=100):
-    """Return recent log lines (for web UI/status)."""
-    try:
-        with open(_log_path, "r", encoding="utf-8") as f:
-            lines = f.readlines()
-            return lines[-limit:]
-    except Exception:
-        return []
+    def info(self, message, step=None):
+        self.log(message, level="INFO", color="primary", step=step)
 
-def cli_log(message, style="info", theme="dark"):
-    """Print message in CLI color (integrated with theme.py)."""
-    from .theme import cli_color
-    print(cli_color(message, style, theme))
+    def success(self, message, step=None):
+        self.log(message, level="SUCCESS", color="success", step=step)
 
-def flush_logs():
-    """Flush all handlers."""
-    for handler in logger.handlers:
-        handler.flush()
+    def warning(self, message, step=None):
+        self.log(message, level="WARNING", color="warning", step=step)
+
+    def error(self, message, step=None):
+        self.log(message, level="ERROR", color="danger", to_stdout=True, step=step)
+
+    def step(self, message, step_name):
+        self.info(message, step=step_name)
+
+    def critical(self, message, step=None):
+        self.log(message, level="CRITICAL", color="danger", to_stdout=True, step=step)
+
+# For general use
+logger = LNMTLogger()
+
+# Helper function for direct logging (simple usage)
+def log(message, level="INFO", color="primary", step=None):
+    logger.log(message, level, color, step=step)
+
+def step_notify(message, step_name):
+    logger.step(message, step_name)

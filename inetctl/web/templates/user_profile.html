@@ -1,25 +1,123 @@
-<!-- templates/user_profile.html -->
-{% extends "base.html" %}
-{% block content %}
-<h2>User Profile</h2>
-<form method="post" autocomplete="off">
-  <label>Email:
-    <input type="email" name="email" value="{{ profile.email }}">
-  </label>
-  <label>Theme:
-    <select name="theme">
-      {% for t_key, t_name in themes.items() %}
-        <option value="{{ t_key }}" {% if t_key == profile.theme %}selected{% endif %}>{{ t_name }}</option>
-      {% endfor %}
-    </select>
-  </label>
-  <fieldset>
-    <legend>Notifications</legend>
-    <label><input type="checkbox" name="notif_system" {% if profile.notification_options.system %}checked{% endif %}> System</label>
-    <label><input type="checkbox" name="notif_jobs" {% if profile.notification_options.jobs %}checked{% endif %}> Jobs</label>
-    <label><input type="checkbox" name="notif_warnings" {% if profile.notification_options.warnings %}checked{% endif %}> Warnings</label>
-    <label><input type="checkbox" name="notif_critical" {% if profile.notification_options.critical %}checked{% endif %}> Critical</label>
-  </fieldset>
-  <button type="submit">Save Profile</button>
-</form>
-{% endblock %}
+<!-- inetctl/web/templates/user_profile.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ portal_title or "Linux Network Management Toolbox" }} - User Profile</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css" />
+    <link rel="stylesheet" href="/static/theme.css">
+    <style>
+        .profile-container {
+            max-width: 520px;
+            margin: 2em auto;
+            padding: 2em;
+            background: var(--color-background, #23272e);
+            border-radius: 1em;
+            box-shadow: 0 2px 16px rgba(0,0,0,0.18);
+        }
+        .profile-header {
+            margin-bottom: 1.5em;
+            text-align: center;
+        }
+        .theme-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .theme-swatch {
+            border-radius: 8px;
+            padding: 1em;
+            cursor: pointer;
+            min-width: 90px;
+            text-align: center;
+            border: 2px solid transparent;
+        }
+        .theme-swatch.selected {
+            border: 2px solid var(--color-primary, #3498db);
+        }
+        .notification-options label {
+            display: block;
+            margin-bottom: 0.2em;
+        }
+    </style>
+    <!-- Theme CSS inject -->
+    <!--THEME_VARS-->
+</head>
+<body>
+    <main>
+        <div class="profile-container">
+            <h2 class="profile-header">User Profile</h2>
+            <form id="profile-form" onsubmit="return saveProfile();">
+                <label>
+                    Username:
+                    <input type="text" value="{{ user.username }}" readonly style="background: #eee;">
+                </label>
+                <label>
+                    Email:
+                    <input type="email" id="email" value="{{ user.email or '' }}" placeholder="Optional, for notifications.">
+                </label>
+                <label>
+                    Change Password:
+                    <input type="password" id="new-password" placeholder="Leave blank to keep current password">
+                </label>
+                <label>
+                    Notification Preferences:
+                    <div class="notification-options">
+                        {% for event, enabled in user.notification_settings.items() %}
+                            <label>
+                                <input type="checkbox" name="notify-{{ event }}" {% if enabled %}checked{% endif %}>
+                                {{ event.replace("_", " ").capitalize() }}
+                            </label>
+                        {% endfor %}
+                    </div>
+                </label>
+                <label>
+                    Theme:
+                    <div class="theme-list">
+                        {% for theme_key, theme_name in theme_names.items() %}
+                            <div class="theme-swatch {% if theme_key == user.theme %}selected{% endif %}" onclick="selectTheme('{{ theme_key }}')" id="theme-{{ theme_key }}">
+                                <span style="display:block;width:24px;height:24px;border-radius:50%;margin:0 auto 4px;background:{{ themes[theme_key]['background'] }};border:1px solid #444;"></span>
+                                <span>{{ theme_name }}</span>
+                            </div>
+                        {% endfor %}
+                    </div>
+                    <input type="hidden" name="theme" id="selected-theme" value="{{ user.theme }}">
+                </label>
+                <div style="text-align: right; margin-top: 1.5em;">
+                    <button type="submit">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </main>
+    <script>
+        function selectTheme(themeKey) {
+            document.querySelectorAll('.theme-swatch').forEach(swatch => swatch.classList.remove('selected'));
+            document.getElementById('theme-' + themeKey).classList.add('selected');
+            document.getElementById('selected-theme').value = themeKey;
+        }
+        function saveProfile() {
+            let data = {
+                email: document.getElementById('email').value,
+                new_password: document.getElementById('new-password').value,
+                theme: document.getElementById('selected-theme').value,
+                notifications: {}
+            };
+            document.querySelectorAll('.notification-options input[type=checkbox]').forEach(cb => {
+                let event = cb.name.replace('notify-', '');
+                data.notifications[event] = cb.checked;
+            });
+            fetch("/profile", {
+                method: "POST",
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(data)
+            })
+            .then(resp => resp.json())
+            .then(d => {
+                alert(d.message || (d.success ? "Profile updated." : "Failed to update profile."));
+                if (d.success) window.location.reload();
+            });
+            return false;
+        }
+    </script>
+</body>
+</html>
