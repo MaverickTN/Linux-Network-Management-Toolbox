@@ -1,8 +1,8 @@
 <div class="mb-3">
-    <label for="theme" class="form-label">Theme:</label>
-    <select class="form-select" id="theme" name="theme">
-        {% for key, name in theme_options %}
-        <option value="{{ key }}" {% if active_theme == key %}selected{% endif %}>{{ name }}</option>
+    <label class="form-label">Theme</label>
+    <select class="form-select" name="theme">
+        {% for key, name in theme_names.items() %}
+        <option value="{{ key }}" {% if profile.theme == key %}selected{% endif %}>{{ name }}</option>
         {% endfor %}
     </select>
 </div>
