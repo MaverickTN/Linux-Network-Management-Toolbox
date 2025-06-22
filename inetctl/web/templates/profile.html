@@ -1,35 +1,46 @@
-{% extends "layout.html" %}
-{% block title %}Profile - Linux Network Management Toolbox{% endblock %}
+{% extends "base.html" %}
+{% block title %}User Profile{% endblock %}
 
 {% block content %}
-<h2>User Profile</h2>
-<form method="POST" autocomplete="off">
-    <div class="mb-3">
-        <label class="form-label">Username</label>
-        <input type="text" class="form-control" value="{{ profile.username }}" readonly>
-    </div>
-    <div class="mb-3">
-        <label class="form-label">Email</label>
-        <input type="email" class="form-control" name="email" value="{{ profile.email or '' }}">
-    </div>
-
-    {% include "profile_theme_selector.html" %}
-
-    <div class="mb-3">
-        <label class="form-label">Notification Events</label>
-        <div>
-            <label>
-                <input type="checkbox" name="notify_events" value="system" {% if "system" in profile.notify_events %}checked{% endif %}> System Events
-            </label>
-            <label>
-                <input type="checkbox" name="notify_events" value="security" {% if "security" in profile.notify_events %}checked{% endif %}> Security Alerts
-            </label>
-            <label>
-                <input type="checkbox" name="notify_events" value="jobs" {% if "jobs" in profile.notify_events %}checked{% endif %}> Job Queue Updates
-            </label>
+<div class="container mt-4">
+    <h2>User Profile</h2>
+    <form method="post" action="{{ url_for('user.profile') }}">
+        <div class="form-group">
+            <label for="user">Username:</label>
+            <input readonly type="text" class="form-control" id="user" value="{{ user }}">
         </div>
-    </div>
-
-    <button type="submit" class="btn btn-primary">Save</button>
-</form>
+        <div class="form-group">
+            <label for="email">Email:</label>
+            <input name="email" id="email" type="email" class="form-control" value="{{ profile.get('email','') }}">
+        </div>
+        <div class="form-group">
+            <label for="theme">Theme:</label>
+            <select name="theme" id="theme" class="form-control">
+                {% for tkey, tname in theme_names.items() %}
+                <option value="{{ tkey }}" {% if profile.theme == tkey %}selected{% endif %}>{{ tname }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label>Notification Preferences:</label>
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" name="notifications" value="system"
+                {% if 'system' in profile.get('notifications', []) %}checked{% endif %}> System Events
+            </div>
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" name="notifications" value="jobs"
+                {% if 'jobs' in profile.get('notifications', []) %}checked{% endif %}> Job Events
+            </div>
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" name="notifications" value="network"
+                {% if 'network' in profile.get('notifications', []) %}checked{% endif %}> Network Changes
+            </div>
+            <!-- Add more as needed -->
+        </div>
+        <button class="btn btn-primary mt-2" type="submit">Update Profile</button>
+    </form>
+    <form method="post" action="{{ url_for('user.change_password') }}" class="mt-3">
+        <button class="btn btn-secondary" type="submit">Change Password</button>
+    </form>
+</div>
 {% endblock %}

@@ -1,66 +1,75 @@
-import os
-import pwd
 import grp
+import pwd
+import getpass
+import os
 
-REQUIRED_GROUPS = {
-    "lnmtadm": "admin",
-    "lnmt": "operator",
-    "lnmtv": "view"
+LNMT_GROUPS = {
+    "admin": "lnmtadm",
+    "operator": "lnmt",
+    "viewer": "lnmtv"
 }
 
-def get_system_user(username):
+def is_system_user(username):
     try:
-        return pwd.getpwnam(username)
-    except KeyError:
-        return None
-
-def get_user_groups(username):
-    """Returns a set of group names the user belongs to."""
-    user = get_system_user(username)
-    if not user:
-        return set()
-    groups = {g.gr_name for g in grp.getgrall() if username in g.gr_mem}
-    # Always add the primary group
-    try:
-        primary_group = grp.getgrgid(user.pw_gid).gr_name
-        groups.add(primary_group)
-    except Exception:
-        pass
-    return groups
-
-def get_lnmt_role(username):
-    """Returns admin/operator/view/None based on group membership."""
-    user_groups = get_user_groups(username)
-    for group, role in REQUIRED_GROUPS.items():
-        if group in user_groups:
-            return role
-    return None
-
-def can_run_cli(username):
-    """Return True if user is allowed to run CLI commands (any role)."""
-    return get_lnmt_role(username) in ("admin", "operator", "view")
-
-def can_run_admin(username):
-    """Return True if user is an admin."""
-    return get_lnmt_role(username) == "admin"
-
-def authenticate_with_pam(username, password):
-    """PAM authentication using python-pam if available."""
-    try:
-        import pam
-        p = pam.pam()
-        return p.authenticate(username, password)
-    except ImportError:
-        # Fallback: always fail
-        return False
-
-def pam_available():
-    try:
-        import pam
+        pwd.getpwnam(username)
         return True
-    except ImportError:
+    except KeyError:
         return False
 
 def username_conflicts_with_system(username):
-    """Prevents creation of web users that match a system user."""
-    return get_system_user(username) is not None
+    """Returns True if username exists on system."""
+    return is_system_user(username)
+
+def get_lnmt_role(username=None):
+    """Returns the LNMT group role for the given user, or None if not allowed."""
+    if username is None:
+        username = getpass.getuser()
+    try:
+        user_groups = [g.gr_name for g in grp.getgrall() if username in g.gr_mem]
+        primary_gid = pwd.getpwnam(username).pw_gid
+        user_groups.append(grp.getgrgid(primary_gid).gr_name)
+    except Exception:
+        return None
+    if LNMT_GROUPS["admin"] in user_groups:
+        return "admin"
+    if LNMT_GROUPS["operator"] in user_groups:
+        return "operator"
+    if LNMT_GROUPS["viewer"] in user_groups:
+        return "viewer"
+    return None
+
+def enforce_cli_permission(min_role="operator"):
+    """Decorator to restrict CLI access by group role."""
+    def decorator(func):
+        def wrapper(*args, **kwargs):
+            username = getpass.getuser()
+            role = get_lnmt_role(username)
+            allowed = ["admin"]
+            if min_role == "operator":
+                allowed.append("operator")
+            if min_role == "viewer":
+                allowed.extend(["operator", "viewer"])
+            if role not in allowed:
+                print("Access denied. You do not have the required group membership.")
+                exit(1)
+            return func(*args, **kwargs)
+        return wrapper
+    return decorator
+
+def is_cli_allowed():
+    username = getpass.getuser()
+    return get_lnmt_role(username) is not None
+
+def create_profile_for_lnmt_user(username):
+    from inetctl.core.user_profiles import get_user_profile, save_user_profile
+    if not is_system_user(username):
+        return
+    if not get_lnmt_role(username):
+        return
+    profile = get_user_profile(username)
+    if not profile or not isinstance(profile, dict):
+        save_user_profile(username, {
+            "theme": "dark",
+            "email": "",
+            "notifications": []
+        })
