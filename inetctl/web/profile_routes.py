@@ -1,72 +1,46 @@
-from flask import Blueprint, request, jsonify, session, render_template, redirect, url_for, flash
+from flask import Blueprint, render_template, request, redirect, url_for, flash, session
+from flask_login import login_required, current_user
 from inetctl.core.profile import (
-    get_user_profile, save_user_profile, auto_generate_profiles,
-    get_access_level, ensure_host_user, list_user_profiles
+    get_user_profile,
+    update_user_profile,
+    auto_create_profile,
+    list_all_profiles,
+    get_user_role,
 )
-from inetctl.theme import THEMES, list_theme_names
-import os
+from inetctl.theme import THEMES
 
-bp = Blueprint('profile', __name__, url_prefix='/profile')
+profile_bp = Blueprint("profile", __name__, url_prefix="/profile")
 
-def get_current_user():
-    return session.get('username') or os.environ.get("USER")
-
-@bp.route("/", methods=["GET"])
-def profile_page():
-    username = get_current_user()
-    if not username:
-        flash("Please log in to view your profile.", "danger")
-        return redirect(url_for("auth.login"))
-    try:
-        profile = get_user_profile(username)
-    except Exception:
-        flash("No profile found.", "danger")
-        return redirect(url_for("home"))
-    access_level = get_access_level(username)
-    theme_names = list_theme_names()
+@profile_bp.route("/", methods=["GET", "POST"])
+@login_required
+def my_profile():
+    username = current_user.username
+    profile = auto_create_profile(username)
+    if request.method == "POST":
+        # Update fields from the form
+        email = request.form.get("email", "")
+        theme = request.form.get("theme", "dark")
+        notify_events = request.form.getlist("notify_events")
+        data = {
+            "email": email,
+            "theme": theme,
+            "notify_events": notify_events,
+        }
+        update_user_profile(username, data)
+        flash("Profile updated.", "success")
+        return redirect(url_for("profile.my_profile"))
     return render_template(
         "profile.html",
         profile=profile,
-        access_level=access_level,
-        themes=theme_names,
+        themes=THEMES,
+        theme_names=[(k, v["name"]) for k, v in THEMES.items()]
     )
 
-@bp.route("/api", methods=["GET", "POST"])
-def profile_api():
-    username = get_current_user()
-    if not username:
-        return jsonify({"error": "not authenticated"}), 401
-    if request.method == "GET":
-        try:
-            profile = get_user_profile(username)
-            return jsonify(profile)
-        except Exception as e:
-            return jsonify({"error": str(e)}), 404
-    elif request.method == "POST":
-        updates = request.json
-        try:
-            profile = get_user_profile(username)
-            # Security: Only allow certain fields to be updated by user
-            allowed = ["display_name", "email", "theme", "notifications"]
-            for k in updates:
-                if k in allowed:
-                    profile[k] = updates[k]
-            save_user_profile(username, profile)
-            return jsonify({"success": True, "profile": profile})
-        except Exception as e:
-            return jsonify({"success": False, "error": str(e)}), 400
-
-@bp.route("/list", methods=["GET"])
-def list_profiles():
-    username = get_current_user()
-    if get_access_level(username) != "admin":
-        return jsonify({"error": "Not authorized"}), 403
-    return jsonify(list_user_profiles())
-
-@bp.route("/init", methods=["POST"])
-def init_profiles():
-    username = get_current_user()
-    if get_access_level(username) != "admin":
-        return jsonify({"error": "Not authorized"}), 403
-    created = auto_generate_profiles()
-    return jsonify({"created": created})
+@profile_bp.route("/admin")
+@login_required
+def admin_profiles():
+    if get_user_role(current_user.username) != "admin":
+        flash("Admin access required.", "danger")
+        return redirect(url_for("profile.my_profile"))
+    profiles = list_all_profiles()
+    return render_template("profiles_admin.html", profiles=profiles)

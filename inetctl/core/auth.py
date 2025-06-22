@@ -1,63 +1,45 @@
-# inetctl/core/auth.py
-
-import pam
+import os
+import sys
 import getpass
-from inetctl.core.user_manager import (
-    user_can_access_cli,
-    get_user_profile,
-    create_user_profile,
-    user_exists_on_host,
-    check_or_create_auto_profile,
-)
+import functools
+import grp
 
-def pam_authenticate(username, password):
-    """Authenticate using system PAM."""
-    p = pam.pam()
-    return p.authenticate(username, password)
+from inetctl.theme import cli_color
 
-def authenticate_cli():
-    """
-    Prompt the user for credentials and validate them via PAM and group.
-    Returns username if successful, else None.
-    """
-    username = getpass.getuser()
-    if not user_can_access_cli(username):
-        print("Access denied: User is not in a permitted group.")
-        return None
+# These are the valid groups for various access levels
+REQUIRED_GROUPS = {
+    "admin": "lnmtadm",
+    "operator": "lnmt",
+    "viewer": "lnmtv",
+}
+
+def get_current_user():
+    return getpass.getuser()
+
+def user_in_group(user, group):
     try:
-        password = getpass.getpass(prompt=f"Password for {username}: ")
-    except Exception:
-        print("Unable to read password input.")
-        return None
-    if pam_authenticate(username, password):
-        # Ensure auto profile if not present
-        check_or_create_auto_profile(username)
-        return username
-    else:
-        print("Authentication failed.")
-        return None
+        return user in grp.getgrnam(group).gr_mem or grp.getgrnam(group).gr_gid == os.getgid()
+    except KeyError:
+        return False
 
-def web_authenticate(username, password):
-    """Authenticate for web login."""
-    if not user_exists_on_host(username):
-        return False
-    if not user_can_access_cli(username):
-        return False
-    if pam_authenticate(username, password):
-        # Ensure auto profile if not present
-        check_or_create_auto_profile(username)
+def check_group(user, allowed_groups):
+    if user == "root":
+        # Allow root to do everything, with a warning
         return True
+    for g in allowed_groups:
+        if user_in_group(user, g):
+            return True
     return False
 
-def prevent_duplicate_profile_creation(new_username):
-    """
-    Prevent web from creating new users that conflict with system users.
-    Returns True if safe to create, False if user is a real system user.
-    """
-    if user_exists_on_host(new_username):
-        return False
-    return True
-
-# Optional: Admin override for root, for system maintenance.
-def is_admin_user(username):
-    return username == "root" or user_can_access_cli(username) == "admin"
+def require_group(groups):
+    def decorator(f):
+        @functools.wraps(f)
+        def wrapper(*args, **kwargs):
+            user = get_current_user()
+            if not check_group(user, groups):
+                msg = f"User '{user}' lacks required group(s): {groups}. Access denied."
+                print(cli_color(msg, "danger"))
+                sys.exit(1)
+            return f(*args, **kwargs)
+        return wrapper
+    return decorator

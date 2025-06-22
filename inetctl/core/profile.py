@@ -1,88 +1,87 @@
 import json
+import os
 from pathlib import Path
 import pwd
 import grp
 
-PROFILE_DIR = Path("/etc/lnmt/profiles")
+PROFILE_DIR = Path("/etc/inetctl/profiles")
 PROFILE_DIR.mkdir(parents=True, exist_ok=True)
 
-def _profile_path(username):
+GROUPS = {
+    "admin": "lnmtadm",
+    "operator": "lnmt",
+    "viewer": "lnmtv"
+}
+
+DEFAULT_PROFILE = {
+    "email": "",
+    "theme": "dark",
+    "notify_events": [],
+    "role": "viewer"
+}
+
+def get_user_role(username):
+    # Determine role by group membership
+    try:
+        user_groups = [g.gr_name for g in grp.getgrall() if username in g.gr_mem]
+        for role, group in GROUPS.items():
+            if group in user_groups or group in [g.gr_name for g in grp.getgrall() if g.gr_gid == pwd.getpwnam(username).pw_gid]:
+                return role
+        return "none"
+    except Exception:
+        return "none"
+
+def profile_path(username):
     return PROFILE_DIR / f"{username}.json"
 
-def list_user_profiles():
-    return [p.stem for p in PROFILE_DIR.glob("*.json")]
-
-def user_profile_exists(username):
-    return _profile_path(username).exists()
-
 def get_user_profile(username):
-    path = _profile_path(username)
-    if not path.exists():
-        raise FileNotFoundError(f"No profile for user {username}")
-    with open(path) as f:
-        return json.load(f)
-
-def create_user_profile(username, access_level="viewer", email="", display_name="", theme="dark"):
-    profile = {
-        "username": username,
-        "display_name": display_name or username,
-        "email": email,
-        "theme": theme,
-        "access_level": access_level,
-        "notifications": {
-            "network_events": True,
-            "config_changes": True,
-            "security_alerts": True,
-            "schedule_reminders": True,
-        }
-    }
-    save_user_profile(username, profile)
-
-def save_user_profile(username, data):
-    path = _profile_path(username)
-    with open(path, "w") as f:
-        json.dump(data, f, indent=2)
-
-def update_user_profile(username, updates: dict):
-    profile = get_user_profile(username)
-    profile.update(updates)
-    save_user_profile(username, profile)
-
-def remove_user_profile(username):
-    path = _profile_path(username)
-    if path.exists():
-        path.unlink()
-
-def ensure_host_user(username):
-    try:
-        pwd.getpwnam(username)
-        return True
-    except KeyError:
-        return False
-
-def get_access_level(username):
-    groups = [g.gr_name for g in grp.getgrall() if username in g.gr_mem]
-    try:
-        primary_gid = pwd.getpwnam(username).pw_gid
-        primary_group = grp.getgrgid(primary_gid).gr_name
-        if primary_group not in groups:
-            groups.append(primary_group)
-    except Exception:
-        pass
-    for level, group in (("admin", "lnmtadm"), ("operator", "lnmt"), ("viewer", "lnmtv")):
-        if group in groups:
-            return level
+    p = profile_path(username)
+    if p.exists():
+        with p.open() as f:
+            data = json.load(f)
+            # auto-upgrade profile with new fields
+            for k, v in DEFAULT_PROFILE.items():
+                if k not in data:
+                    data[k] = v
+            return data
     return None
 
-def auto_generate_profiles():
-    created = 0
-    for group, level in [("lnmtadm", "admin"), ("lnmt", "operator"), ("lnmtv", "viewer")]:
+def update_user_profile(username, updates: dict):
+    profile = get_user_profile(username) or DEFAULT_PROFILE.copy()
+    profile.update(updates)
+    with profile_path(username).open("w") as f:
+        json.dump(profile, f, indent=2)
+
+def auto_create_profile(username):
+    p = profile_path(username)
+    if not p.exists():
+        # Only create if user exists on host and is in proper group
         try:
-            members = grp.getgrnam(group).gr_mem
-            for u in members:
-                if not user_profile_exists(u):
-                    create_user_profile(u, access_level=level)
-                    created += 1
+            pwd.getpwnam(username)
+            role = get_user_role(username)
+            if role == "none":
+                return None
+            data = DEFAULT_PROFILE.copy()
+            data["role"] = role
+            with p.open("w") as f:
+                json.dump(data, f, indent=2)
+            return data
         except KeyError:
-            continue
-    return created
+            # User not found on host
+            return None
+    return get_user_profile(username)
+
+def list_all_profiles():
+    profiles = []
+    for file in PROFILE_DIR.glob("*.json"):
+        with file.open() as f:
+            profiles.append(json.load(f))
+    return profiles
+
+def prevent_host_user_conflict(new_username):
+    # No web-only user may match a host user
+    try:
+        pwd.getpwnam(new_username)
+        return False
+    except KeyError:
+        return True
