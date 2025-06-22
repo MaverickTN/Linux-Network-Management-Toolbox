@@ -1,84 +1,81 @@
-# inetctl/core/config_loader.py
-
+import os
 import json
 import shutil
 from pathlib import Path
+import datetime
 
+CONFIG_DIR = Path("/etc/lnmt")
+CONFIG_FILE = CONFIG_DIR / "server_config.json"
+CONFIG_BACKUP_DIR = CONFIG_DIR / "backups"
 CONFIG_SEARCH_PATHS = [
-    "/etc/lnmt/server_config.json",
-    str(Path.home() / ".lnmt_config.json"),
-    str(Path.cwd() / "server_config.json"),
+    CONFIG_FILE,
+    Path("/usr/local/etc/lnmt/server_config.json"),
+    Path("./server_config.json")
 ]
-
-BACKUP_SUFFIX = ".bak"
 
 def find_config_file():
     for path in CONFIG_SEARCH_PATHS:
-        p = Path(path)
-        if p.exists():
-            return p
+        if path.exists():
+            return path
     return None
 
-def load_config(config_path=None):
-    """Load and validate the configuration file, repairing if possible."""
-    config_path = Path(config_path or find_config_file() or CONFIG_SEARCH_PATHS[-1])
-    if not config_path.exists():
-        raise FileNotFoundError(f"Config file not found at {config_path}")
-
-    # Backup before load
-    backup_config(config_path)
-
-    with open(config_path, "r") as f:
-        try:
-            config = json.load(f)
-            if not validate_config(config):
-                raise ValueError("Configuration validation failed.")
-            return config
-        except Exception as e:
-            # Attempt auto-repair if backup exists
-            repaired = attempt_auto_repair(config_path)
-            if repaired:
-                return repaired
-            raise e
-
-def save_config(config, config_path=None):
-    config_path = Path(config_path or find_config_file() or CONFIG_SEARCH_PATHS[-1])
-    # Backup before save
-    backup_config(config_path)
-    with open(config_path, "w") as f:
-        json.dump(config, f, indent=2)
-
-def backup_config(config_path):
-    config_path = Path(config_path)
+def backup_config(config_path=CONFIG_FILE):
+    CONFIG_BACKUP_DIR.mkdir(parents=True, exist_ok=True)
     if config_path.exists():
-        backup_path = config_path.with_suffix(config_path.suffix + BACKUP_SUFFIX)
+        ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        backup_path = CONFIG_BACKUP_DIR / f"server_config_{ts}.json"
         shutil.copy2(config_path, backup_path)
-
-def attempt_auto_repair(config_path):
-    backup_path = Path(str(config_path) + BACKUP_SUFFIX)
-    if backup_path.exists():
-        try:
-            with open(backup_path, "r") as f:
-                config = json.load(f)
-                if validate_config(config):
-                    # Restore backup
-                    shutil.copy2(backup_path, config_path)
-                    return config
-        except Exception:
-            pass
+        return backup_path
     return None
 
 def validate_config(config):
-    """
-    Validate the configuration structure.
-    Extend this function as new keys are added.
-    """
-    # Minimal required keys for now
-    required_top_keys = [
-        "global_settings", "system_paths", "web_portal", "qos_policies"
-    ]
-    for k in required_top_keys:
-        if k not in config:
-            return False
-    # Additional, deeper validation can be added here
+    required_keys = ["global_settings", "system_paths", "networks", "known_hosts",
+                     "security", "web_portal", "qos_policies", "pihole", "wireguard"]
+    for key in required_keys:
+        if key not in config:
+            raise ValueError(f"Missing required config key: {key}")
+    # Add more structure/content checks as needed
     return True
+
+def attempt_repair(config_path):
+    try:
+        # Try to read with errors, attempt to salvage if possible (naive JSON fix)
+        with open(config_path, "r") as f:
+            raw = f.read()
+        # Remove trailing commas (naive, but sometimes helps)
+        raw = raw.replace(",\n}", "\n}").replace(",\n]", "\n]")
+        config = json.loads(raw)
+        validate_config(config)
+        save_config(config, config_path=config_path, backup=False)
+        return config
+    except Exception as e:
+        raise RuntimeError(f"Unable to auto-repair config: {e}")
+
+def load_config():
+    path = find_config_file()
+    if not path:
+        raise FileNotFoundError("No config file found in expected locations.")
+    try:
+        with open(path, "r") as f:
+            config = json.load(f)
+        validate_config(config)
+        return config
+    except Exception as e:
+        print(f"Config load failed: {e}")
+        print("Attempting auto-repair...")
+        config = attempt_repair(path)
+        print("Auto-repair succeeded.")
+        return config
+
+def save_config(config, config_path=CONFIG_FILE, backup=True):
+    if backup and config_path.exists():
+        backup_config(config_path)
+    validate_config(config)
+    os.makedirs(config_path.parent, exist_ok=True)
+    with open(config_path, "w") as f:
+        json.dump(config, f, indent=2)
+
+def list_backups():
+    if not CONFIG_BACKUP_DIR.exists():
+        return []
+    return sorted(CONFIG_BACKUP_DIR.glob("server_config_*.json"), reverse=True)
