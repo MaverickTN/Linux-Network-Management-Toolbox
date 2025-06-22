@@ -1,0 +1,14 @@
+[Unit]
+Description=Linux Network Management Toolbox (LNMT)
+After=network.target
+
+[Service]
+Type=simple
+User=lnmt
+Group=lnmt
+ExecStart=/usr/local/bin/lnmt-web
+WorkingDirectory=/usr/local/lib/lnmt/
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
