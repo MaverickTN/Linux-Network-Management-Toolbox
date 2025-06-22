@@ -1,30 +1,35 @@
-{% extends "base.html" %}
+{% extends "layout.html" %}
+{% block title %}Profile - Linux Network Management Toolbox{% endblock %}
+
 {% block content %}
 <h2>User Profile</h2>
-<form method="POST" action="{{ url_for('profile.my_profile') }}">
+<form method="POST" autocomplete="off">
     <div class="mb-3">
-        <label for="email" class="form-label">Email address:</label>
-        <input type="email" class="form-control" name="email" id="email" value="{{ profile.email }}">
+        <label class="form-label">Username</label>
+        <input type="text" class="form-control" value="{{ profile.username }}" readonly>
     </div>
+    <div class="mb-3">
+        <label class="form-label">Email</label>
+        <input type="email" class="form-control" name="email" value="{{ profile.email or '' }}">
+    </div>
+
     {% include "profile_theme_selector.html" %}
+
     <div class="mb-3">
-        <label for="notify_events">Notifications:</label>
-        <div class="form-check">
-            <input class="form-check-input" type="checkbox" name="notify_events" value="jobs" id="notify_jobs"
-                {% if 'jobs' in profile.notify_events %}checked{% endif %}>
-            <label class="form-check-label" for="notify_jobs">Job Events</label>
-        </div>
-        <div class="form-check">
-            <input class="form-check-input" type="checkbox" name="notify_events" value="timers" id="notify_timers"
-                {% if 'timers' in profile.notify_events %}checked{% endif %}>
-            <label class="form-check-label" for="notify_timers">Timer Events</label>
-        </div>
-        <div class="form-check">
-            <input class="form-check-input" type="checkbox" name="notify_events" value="security" id="notify_security"
-                {% if 'security' in profile.notify_events %}checked{% endif %}>
-            <label class="form-check-label" for="notify_security">Security Events</label>
+        <label class="form-label">Notification Events</label>
+        <div>
+            <label>
+                <input type="checkbox" name="notify_events" value="system" {% if "system" in profile.notify_events %}checked{% endif %}> System Events
+            </label>
+            <label>
+                <input type="checkbox" name="notify_events" value="security" {% if "security" in profile.notify_events %}checked{% endif %}> Security Alerts
+            </label>
+            <label>
+                <input type="checkbox" name="notify_events" value="jobs" {% if "jobs" in profile.notify_events %}checked{% endif %}> Job Queue Updates
+            </label>
         </div>
     </div>
-    <button type="submit" class="btn btn-primary">Save Changes</button>
+
+    <button type="submit" class="btn btn-primary">Save</button>
 </form>
 {% endblock %}

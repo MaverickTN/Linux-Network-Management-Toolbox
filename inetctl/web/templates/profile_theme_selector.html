@@ -1,12 +1,8 @@
-<!-- profile_theme_selector.html -->
-<div class="theme-selector">
-    <label for="theme">Theme:</label>
-    <select name="theme" id="theme" class="form-select">
-        {% for key, theme in themes.items() %}
-            <option value="{{ key }}"
-                {% if profile.theme == key %}selected{% endif %}>
-                {{ theme.name }}
-            </option>
+<div class="mb-3">
+    <label for="theme" class="form-label">Theme:</label>
+    <select class="form-select" id="theme" name="theme">
+        {% for key, name in theme_options %}
+        <option value="{{ key }}" {% if active_theme == key %}selected{% endif %}>{{ name }}</option>
         {% endfor %}
     </select>
 </div>
