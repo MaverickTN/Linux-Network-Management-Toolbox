@@ -1,60 +1,36 @@
-# inetctl/core/logging.py
-
-import sys
+import logging
+from logging.handlers import RotatingFileHandler
+import os
 from datetime import datetime
-from pathlib import Path
 
-from inetctl.theme import cli_color, get_theme
+LOG_DIR = "/var/log/lnmt"
+os.makedirs(LOG_DIR, exist_ok=True)
+LOG_FILE = os.path.join(LOG_DIR, "lnmt.log")
 
-DEFAULT_LOGFILE = "/var/log/lnmt.log"
+logger = logging.getLogger("lnmt")
+logger.setLevel(logging.INFO)
 
-class LNMTLogger:
-    def __init__(self, logfile=DEFAULT_LOGFILE, theme="dark"):
-        self.logfile = Path(logfile)
-        self.theme = theme
+handler = RotatingFileHandler(LOG_FILE, maxBytes=2 * 1024 * 1024, backupCount=5)
+formatter = logging.Formatter(
+    "%(asctime)s [%(levelname)s] %(message)s"
+)
+handler.setFormatter(formatter)
+logger.addHandler(handler)
 
-    def log(self, message, level="INFO", color="primary", to_stdout=True, step=None):
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        prefix = f"[{timestamp}] [{level}]"
-        if step:
-            prefix += f" [STEP: {step}]"
-        colored = cli_color(f"{prefix} {message}", color, self.theme)
+def log_event(message, level="info"):
+    ts = datetime.utcnow().isoformat()
+    if level == "info":
+        logger.info(message)
+    elif level == "warning":
+        logger.warning(message)
+    elif level == "error":
+        logger.error(message)
+    elif level == "debug":
+        logger.debug(message)
+    else:
+        logger.info(message)
+    # For web: Could also queue toasts or notifications here
+    print(f"{ts} [{level.upper()}] {message}")
 
-        if to_stdout:
-            print(colored, file=sys.stdout if level != "ERROR" else sys.stderr)
-        # Always write to log file (uncolored)
-        try:
-            self.logfile.parent.mkdir(parents=True, exist_ok=True)
-            with self.logfile.open("a") as f:
-                f.write(f"{prefix} {message}\n")
-        except Exception as e:
-            # Fail silently or print to stderr if desired
-            print(f"Logging error: {e}", file=sys.stderr)
-
-    def info(self, message, step=None):
-        self.log(message, level="INFO", color="primary", step=step)
-
-    def success(self, message, step=None):
-        self.log(message, level="SUCCESS", color="success", step=step)
-
-    def warning(self, message, step=None):
-        self.log(message, level="WARNING", color="warning", step=step)
-
-    def error(self, message, step=None):
-        self.log(message, level="ERROR", color="danger", to_stdout=True, step=step)
-
-    def step(self, message, step_name):
-        self.info(message, step=step_name)
-
-    def critical(self, message, step=None):
-        self.log(message, level="CRITICAL", color="danger", to_stdout=True, step=step)
-
-# For general use
-logger = LNMTLogger()
-
-# Helper function for direct logging (simple usage)
-def log(message, level="INFO", color="primary", step=None):
-    logger.log(message, level, color, step=step)
-
-def step_notify(message, step_name):
-    logger.step(message, step_name)
+def log_step(action, status="ok"):
+    log_event(f"STEP: {action} [{status}]", "info")

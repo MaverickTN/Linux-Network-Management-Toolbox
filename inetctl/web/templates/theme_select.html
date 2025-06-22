@@ -1,0 +1,18 @@
+<!-- inetctl/web/templates/theme_select.html -->
+<div class="theme-select">
+    <label for="theme">Select Theme:</label>
+    <select id="theme" name="theme" onchange="changeTheme(this.value)">
+        {% for key, name in themes.items() %}
+        <option value="{{ key }}" {% if key == current_theme %}selected{% endif %}>{{ name }}</option>
+        {% endfor %}
+    </select>
+</div>
+<script>
+function changeTheme(themeKey) {
+    fetch("/profile/set_theme", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({theme: themeKey})
+    }).then(r => location.reload());
+}
+</script>

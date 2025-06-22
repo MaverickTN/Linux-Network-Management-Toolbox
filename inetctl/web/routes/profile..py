@@ -1,43 +1,46 @@
+# inetctl/web/routes/profile.py
+
 from flask import Blueprint, render_template, request, redirect, url_for, flash, session
 from flask_login import login_required, current_user
-from inetctl.core.profile import get_user_profile, update_user_profile, list_all_profiles
+from inetctl.core.user_profile import (
+    get_or_create_user_profile, update_profile, get_user_theme
+)
 from inetctl.theme import THEMES
 
-bp = Blueprint("profile", __name__, url_prefix="/profile")
+profile_bp = Blueprint("profile", __name__, url_prefix="/profile")
 
-@bp.route("/", methods=["GET", "POST"])
+@profile_bp.route("/", methods=["GET", "POST"])
 @login_required
-def my_profile():
-    username = current_user.get_id()
-    profile = get_user_profile(username)
-    if not profile:
-        flash("Profile not found or access denied.", "danger")
-        return redirect(url_for("home.index"))
+def profile():
+    username = current_user.username
+    profile, _ = get_or_create_user_profile(username)
+    theme_keys = list(THEMES.keys())
 
     if request.method == "POST":
-        email = request.form.get("email", "")
-        notify_events = request.form.getlist("notify_events")
-        theme = request.form.get("theme", "dark")
-        # Update user profile
-        update_user_profile(username, {
-            "email": email,
-            "notify_events": notify_events,
-            "theme": theme
-        })
-        flash("Profile updated successfully.", "success")
-        return redirect(url_for("profile.my_profile"))
+        # Theme selection
+        theme = request.form.get("theme")
+        if theme not in theme_keys:
+            theme = "dark"
 
-    theme_options = [(key, theme["name"]) for key, theme in THEMES.items()]
+        # Email and notifications
+        email = request.form.get("email", "")
+        notification_prefs = request.form.getlist("notifications")
+        contact_methods = request.form.get("contact_methods", "").split(',')
+
+        update_profile(
+            username,
+            theme=theme,
+            email=email,
+            notification_prefs=notification_prefs,
+            contact_methods=contact_methods,
+        )
+        flash("Profile updated.", "success")
+        return redirect(url_for("profile.profile"))
+
+    # Populate form fields
     return render_template(
         "profile.html",
         profile=profile,
-        theme_options=theme_options,
-        active_theme=profile.get("theme", "dark")
+        themes=THEMES,
+        theme_keys=theme_keys
     )
-
-@bp.route("/all")
-@login_required
-def all_profiles():
-    # Admin-only, for future RBAC
-    profiles = list_all_profiles()
-    return render_template("profile_list.html", profiles=profiles)

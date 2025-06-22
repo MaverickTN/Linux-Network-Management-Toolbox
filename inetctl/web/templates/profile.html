@@ -1,46 +1,42 @@
+<!-- inetctl/web/templates/profile.html -->
+
 {% extends "base.html" %}
 {% block title %}User Profile{% endblock %}
 
 {% block content %}
-<div class="container mt-4">
+<div class="profile-container card">
     <h2>User Profile</h2>
-    <form method="post" action="{{ url_for('user.profile') }}">
+    <form method="post">
         <div class="form-group">
-            <label for="user">Username:</label>
-            <input readonly type="text" class="form-control" id="user" value="{{ user }}">
+            <label>Username:</label>
+            <input type="text" value="{{ profile.username }}" disabled class="form-control" />
         </div>
         <div class="form-group">
-            <label for="email">Email:</label>
-            <input name="email" id="email" type="email" class="form-control" value="{{ profile.get('email','') }}">
+            <label>Email:</label>
+            <input type="email" name="email" value="{{ profile.email }}" class="form-control" />
         </div>
         <div class="form-group">
-            <label for="theme">Theme:</label>
-            <select name="theme" id="theme" class="form-control">
-                {% for tkey, tname in theme_names.items() %}
-                <option value="{{ tkey }}" {% if profile.theme == tkey %}selected{% endif %}>{{ tname }}</option>
+            <label>Theme:</label>
+            <select name="theme" class="form-control">
+                {% for tkey, theme in themes.items() %}
+                <option value="{{ tkey }}" {% if profile.theme == tkey %}selected{% endif %}>{{ theme.name }}</option>
                 {% endfor %}
             </select>
         </div>
         <div class="form-group">
-            <label>Notification Preferences:</label>
-            <div class="form-check">
-                <input class="form-check-input" type="checkbox" name="notifications" value="system"
-                {% if 'system' in profile.get('notifications', []) %}checked{% endif %}> System Events
-            </div>
-            <div class="form-check">
-                <input class="form-check-input" type="checkbox" name="notifications" value="jobs"
-                {% if 'jobs' in profile.get('notifications', []) %}checked{% endif %}> Job Events
-            </div>
-            <div class="form-check">
-                <input class="form-check-input" type="checkbox" name="notifications" value="network"
-                {% if 'network' in profile.get('notifications', []) %}checked{% endif %}> Network Changes
-            </div>
-            <!-- Add more as needed -->
+            <label>Contact Methods (comma separated):</label>
+            <input type="text" name="contact_methods" value="{{ profile.contact_methods|join(', ') }}" class="form-control" />
         </div>
-        <button class="btn btn-primary mt-2" type="submit">Update Profile</button>
-    </form>
-    <form method="post" action="{{ url_for('user.change_password') }}" class="mt-3">
-        <button class="btn btn-secondary" type="submit">Change Password</button>
+        <div class="form-group">
+            <label>Notifications:</label>
+            <div>
+                <label><input type="checkbox" name="notifications" value="jobs" {% if "jobs" in profile.notification_prefs %}checked{% endif %}/> Job Updates</label>
+                <label><input type="checkbox" name="notifications" value="alerts" {% if "alerts" in profile.notification_prefs %}checked{% endif %}/> Security Alerts</label>
+                <label><input type="checkbox" name="notifications" value="timer" {% if "timer" in profile.notification_prefs %}checked{% endif %}/> Scheduled Events</label>
+                <!-- Add more notification types as needed -->
+            </div>
+        </div>
+        <button type="submit" class="btn btn-primary">Update Profile</button>
     </form>
 </div>
 {% endblock %}
