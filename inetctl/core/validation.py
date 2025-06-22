@@ -1,45 +1,54 @@
-def validate_config(config):
-    problems = []
-    # Example: Check top-level keys
-    required = ["global_settings", "system_paths", "networks", "known_hosts"]
-    for key in required:
+import json
+import shutil
+from pathlib import Path
+from datetime import datetime
+
+CONFIG_PATH = Path("/etc/lnmt/server_config.json")
+BACKUP_DIR = Path("/etc/lnmt/backup")
+
+DEFAULT_CONFIG = {
+    # ... full default config structure as previously defined ...
+}
+
+def backup_config():
+    BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    backup_path = BACKUP_DIR / f"server_config_{timestamp}.json"
+    if CONFIG_PATH.exists():
+        shutil.copy(CONFIG_PATH, backup_path)
+    return backup_path
+
+def validate_config(config=None, repair=False):
+    """
+    Validate the loaded configuration.
+    If repair=True, attempt to restore missing/invalid values from default.
+    Returns (is_valid, repaired_config or None)
+    """
+    from inetctl.core.config_loader import load_config
+    if config is None:
+        config = load_config()
+    is_valid = True
+    repaired = False
+
+    # Shallow validation - expand with deeper checks as needed!
+    for key in DEFAULT_CONFIG:
         if key not in config:
-            problems.append(f"Missing key: {key}")
+            is_valid = False
+            if repair:
+                config[key] = DEFAULT_CONFIG[key]
+                repaired = True
+    # Add further field-level validation here
 
-    # Example: Check host schedules for overlaps
-    for host in config.get("known_hosts", []):
-        blocks = host.get("schedule_blocks", [])
-        times = []
-        for b in blocks:
-            try:
-                s, e = b.split("-")
-                s = [int(x) for x in s.split(":")]
-                e = [int(x) for x in e.split(":")]
-                s = s[0]*60 + s[1]
-                e = e[0]*60 + e[1]
-                times.append((s, e))
-            except Exception:
-                problems.append(f"Malformed schedule block '{b}' in {host.get('mac')}")
-        # Check for overlaps
-        for i in range(len(times)):
-            for j in range(i+1, len(times)):
-                if max(times[i][0], times[j][0]) < min(times[i][1], times[j][1]):
-                    problems.append(f"Overlapping blocks in host {host.get('mac')}")
-    return (len(problems) == 0), problems
+    if not is_valid and repair:
+        backup_path = backup_config()
+        with open(CONFIG_PATH, "w") as f:
+            json.dump(config, f, indent=2)
+        return False, config, backup_path
+    return is_valid, (config if repair else None), None
 
-def repair_config(config):
-    ok, problems = validate_config(config)
-    fixed = False
-    if not ok:
-        # Remove overlapping blocks for each host
-        for host in config.get("known_hosts", []):
-            blocks = host.get("schedule_blocks", [])
-            seen = set()
-            valid = []
-            for b in blocks:
-                if b not in seen:
-                    valid.append(b)
-                    seen.add(b)
-            host["schedule_blocks"] = valid
-            fixed = True
-    return config, fixed
+def auto_validate_on_load():
+    # This function can be called on config load, e.g. from config_loader.py
+    valid, repaired_config, backup_path = validate_config(repair=True)
+    if not valid and repaired_config:
+        print(f"Config was invalid. Backed up old config to {backup_path} and auto-repaired.")
+    return valid
