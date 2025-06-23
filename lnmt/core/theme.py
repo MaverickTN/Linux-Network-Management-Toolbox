@@ -1,7 +1,3 @@
-# lnmt/core/theme.py
-
-import json
-
 THEMES = {
     "dark": {
         "name": "Dark",
@@ -200,20 +196,3 @@ def get_theme(theme_key="dark"):
 
 def list_theme_names():
     return {k: v["name"] for k, v in THEMES.items()}
-
-def theme_css_vars(theme_key="dark"):
-    theme = get_theme(theme_key)
-    lines = []
-    for k, v in theme.items():
-        if isinstance(v, str) and k != "name":
-            lines.append(f"  --color-{k}: {v};")
-    return ":root {\n" + "\n".join(lines) + "\n}"
-
-def cli_color(text, style="primary", theme_key="dark"):
-    color_code = THEMES.get(theme_key, THEMES["dark"])["cli"].get(style, "")
-    reset_code = THEMES.get(theme_key, THEMES["dark"])["cli"]["reset"]
-    return f"{color_code}{text}{reset_code}"
-
-def inject_theme_into_html(html, theme_key="dark"):
-    css = theme_css_vars(theme_key)
-    return html.replace("<!--THEME_VARS-->", f"<style>{css}</style>")

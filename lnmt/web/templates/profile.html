@@ -1,42 +1,28 @@
-<!-- lnmt/web/templates/profile.html -->
-
 {% extends "base.html" %}
 {% block title %}User Profile{% endblock %}
 
 {% block content %}
-<div class="profile-container card">
-    <h2>User Profile</h2>
-    <form method="post">
-        <div class="form-group">
-            <label>Username:</label>
-            <input type="text" value="{{ profile.username }}" disabled class="form-control" />
-        </div>
-        <div class="form-group">
-            <label>Email:</label>
-            <input type="email" name="email" value="{{ profile.email }}" class="form-control" />
-        </div>
-        <div class="form-group">
-            <label>Theme:</label>
-            <select name="theme" class="form-control">
-                {% for tkey, theme in themes.items() %}
-                <option value="{{ tkey }}" {% if profile.theme == tkey %}selected{% endif %}>{{ theme.name }}</option>
-                {% endfor %}
-            </select>
-        </div>
-        <div class="form-group">
-            <label>Contact Methods (comma separated):</label>
-            <input type="text" name="contact_methods" value="{{ profile.contact_methods|join(', ') }}" class="form-control" />
-        </div>
-        <div class="form-group">
-            <label>Notifications:</label>
-            <div>
-                <label><input type="checkbox" name="notifications" value="jobs" {% if "jobs" in profile.notification_prefs %}checked{% endif %}/> Job Updates</label>
-                <label><input type="checkbox" name="notifications" value="alerts" {% if "alerts" in profile.notification_prefs %}checked{% endif %}/> Security Alerts</label>
-                <label><input type="checkbox" name="notifications" value="timer" {% if "timer" in profile.notification_prefs %}checked{% endif %}/> Scheduled Events</label>
-                <!-- Add more notification types as needed -->
-            </div>
-        </div>
-        <button type="submit" class="btn btn-primary">Update Profile</button>
-    </form>
+<div class="card mt-4 p-4">
+  <h2 class="mb-3">User Profile: {{ profile['username'] }}</h2>
+  <form method="post">
+    <div class="mb-3">
+      <label for="email" class="form-label">Email address:</label>
+      <input type="email" class="form-control" name="email" id="email" value="{{ profile['email'] or '' }}">
+    </div>
+    <div class="mb-3">
+      <label for="theme" class="form-label">Theme:</label>
+      <select class="form-select" name="theme" id="theme">
+        {% for theme_key, theme_name in themes.items() %}
+        <option value="{{ theme_key }}" {% if profile['theme'] == theme_key %}selected{% endif %}>{{ theme_name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="mb-3">
+      <label for="notify_mask" class="form-label">Notification Settings:</label>
+      <input type="text" class="form-control" name="notify_mask" id="notify_mask" value="{{ profile['notify_mask'] or '' }}">
+      <div class="form-text">Comma-separated list of notification types (e.g. "alerts,schedule,network").</div>
+    </div>
+    <button type="submit" class="btn btn-primary">Save Changes</button>
+  </form>
 </div>
 {% endblock %}

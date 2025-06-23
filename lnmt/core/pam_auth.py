@@ -1,29 +1,13 @@
 import pam
-import pwd
-from lnmt.core.cli_auth import LNMT_GROUPS
+import getpass
 
 def pam_authenticate(username, password):
     p = pam.pam()
-    if not p.authenticate(username, password):
-        return False
-    # Make sure the username exists on the system and is in a valid group.
-    try:
-        pwd.getpwnam(username)
-    except KeyError:
-        return False
-    # Check group membership
-    from lnmt.core.cli_auth import get_user_role
-    if get_user_role(username) is None:
-        return False
-    return True
+    return p.authenticate(username, password)
 
-def is_system_user(username):
+def get_current_user():
+    """Get the currently logged-in UNIX username."""
     try:
-        pwd.getpwnam(username)
-        return True
-    except KeyError:
-        return False
-
-def can_create_profile(username):
-    # Forbid creation if this matches a system account (security)
-    return not is_system_user(username)
+        return getpass.getuser()
+    except Exception:
+        return None

@@ -1,33 +1,54 @@
 #!/bin/bash
+# lnmt/install.sh
+# Linux Network Management Toolbox Installer/Updater
+
 set -e
 
-APP_USER="lnmt"
-APP_GROUP="lnmt"
+APP_NAME="lnmt"
+CONFIG_DIR="/etc/lnmt"
+DB_FILE="$CONFIG_DIR/lnmt.sqlite3"
+SYSTEMD_SERVICE="/etc/systemd/system/lnmt.service"
+BIN_TARGET="/usr/local/bin/lnmt"
+REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-echo "== Creating config and data directories =="
-sudo mkdir -p /etc/lnmt
-sudo mkdir -p /usr/local/lib/lnmt
+echo "Installing Linux Network Management Toolbox..."
 
-echo "== Creating lnmt system user and group (if not present) =="
-if ! id -u $APP_USER >/dev/null 2>&1; then
-    sudo useradd -r -s /bin/false $APP_USER
+# Create config and data directories
+sudo mkdir -p "$CONFIG_DIR"
+
+# Copy configuration template if not present
+if [ ! -f "$CONFIG_DIR/server_config.json" ]; then
+    sudo cp "$REPO_DIR/config/server_config.json.example" "$CONFIG_DIR/server_config.json"
 fi
 
-echo "== Copying application files =="
-sudo cp -r lnmt/* /usr/local/lib/lnmt/
-sudo cp lnmt-runner.py /usr/local/bin/lnmt-web
-sudo chmod +x /usr/local/bin/lnmt-web
+# Place executable wrapper
+sudo cp "$REPO_DIR/lnmt-runner.py" "$BIN_TARGET"
+sudo chmod +x "$BIN_TARGET"
 
-echo "== Creating initial config if not present =="
-sudo cp default_server_config.json /etc/lnmt/server_config.json 2>/dev/null || true
+# Copy systemd service file
+sudo tee "$SYSTEMD_SERVICE" > /dev/null <<EOL
+[Unit]
+Description=Linux Network Management Toolbox Web Service
+After=network.target
 
-echo "== Setting up systemd service =="
-sudo cp lnmt.service /etc/systemd/system/lnmt.service
+[Service]
+ExecStart=/usr/bin/python3 $BIN_TARGET web
+WorkingDirectory=$CONFIG_DIR
+Restart=on-failure
+User=lnmt
+Group=lnmt
+
+[Install]
+WantedBy=multi-user.target
+EOL
+
+echo "Reloading systemd..."
 sudo systemctl daemon-reload
 sudo systemctl enable lnmt.service
 
-echo "== Setting permissions =="
-sudo chown -R $APP_USER:$APP_GROUP /etc/lnmt
-sudo chown -R $APP_USER:$APP_GROUP /usr/local/lib/lnmt
+echo "Creating lnmt user/group if necessary..."
+if ! id -u lnmt >/dev/null 2>&1; then
+    sudo useradd -r -s /bin/false lnmt
+fi
 
-echo "== Done! Use: sudo systemctl start lnmt =="
+echo "Installation complete! Start with: sudo systemctl start lnmt"

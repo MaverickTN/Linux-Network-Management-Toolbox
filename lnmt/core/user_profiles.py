@@ -1,60 +1,60 @@
+import sqlite3
 import os
-import json
-import pwd
-from pathlib import Path
-from lnmt.theme import THEMES
 
-PROFILE_DIR = Path("/etc/lnmt/users")  # Adjust as needed for permissions
+DB_PATH = os.environ.get("LNMT_PROFILE_DB") or "/etc/lnmt/lnmt_users.db"
 
-DEFAULT_PROFILE = {
-    "email": "",
-    "notify_events": [],
-    "theme": "dark",
-    "custom_theme": {},
-    "contact": {},
-}
+def get_db():
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
 
-def get_profile_path(username):
-    return PROFILE_DIR / f"{username}.json"
+def init_user_db():
+    conn = get_db()
+    with conn:
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS user_profiles (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE NOT NULL,
+                email TEXT,
+                notify_mask TEXT,
+                theme TEXT DEFAULT 'dark'
+            )"""
+        )
+    conn.close()
 
-def ensure_profile(username):
-    path = get_profile_path(username)
-    PROFILE_DIR.mkdir(parents=True, exist_ok=True)
-    if not path.exists():
-        # System users get a default profile with their preferred theme
-        profile = DEFAULT_PROFILE.copy()
-        # Try to read their preferred shell (for CLI) or assign dark theme
-        profile["theme"] = "dark"
-        with open(path, "w") as f:
-            json.dump(profile, f, indent=2)
-    return path
+def get_user_profile(username):
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM user_profiles WHERE username = ?", (username,))
+    row = cur.fetchone()
+    conn.close()
+    return row
 
-def get_profile(username):
-    path = get_profile_path(username)
-    if not path.exists():
-        ensure_profile(username)
-    with open(path, "r") as f:
-        return json.load(f)
+def upsert_user_profile(username, email=None, notify_mask=None, theme=None):
+    conn = get_db()
+    with conn:
+        existing = get_user_profile(username)
+        if existing:
+            conn.execute(
+                "UPDATE user_profiles SET email = COALESCE(?, email), notify_mask = COALESCE(?, notify_mask), theme = COALESCE(?, theme) WHERE username = ?",
+                (email, notify_mask, theme, username),
+            )
+        else:
+            conn.execute(
+                "INSERT INTO user_profiles (username, email, notify_mask, theme) VALUES (?, ?, ?, ?)",
+                (username, email, notify_mask, theme or "dark"),
+            )
+    conn.close()
 
-def update_profile(username, updates):
-    path = get_profile_path(username)
-    if not path.exists():
-        ensure_profile(username)
-    profile = get_profile(username)
-    profile.update(updates)
-    with open(path, "w") as f:
-        json.dump(profile, f, indent=2)
-    return profile
+def all_user_profiles():
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM user_profiles")
+    rows = cur.fetchall()
+    conn.close()
+    return rows
 
-def get_user_theme(username):
-    try:
-        profile = get_profile(username)
-        theme_key = profile.get("theme", "dark")
-        return THEMES.get(theme_key, THEMES["dark"])
-    except Exception:
-        return THEMES["dark"]
-
-def list_all_profiles():
-    if not PROFILE_DIR.exists():
-        return []
-    return [p.stem for p in PROFILE_DIR.glob("*.json")]
+def auto_create_user(username):
+    """Auto-create a profile for first-time LNMT group member."""
+    if get_user_profile(username) is None:
+        upsert_user_profile(username)
