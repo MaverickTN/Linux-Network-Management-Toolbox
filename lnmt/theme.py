@@ -190,33 +190,7 @@ THEMES = {
             "warning": "\033[93m",
             "reset": "\033[0m"
         }
-    },
-    "starbase": {
-        "name": "Starbase",
-        "primary": "#8be9fd",
-        "background": "#212c3b",
-        "foreground": "#e3e8ee",
-        "accent": "#50fa7b",
-        "danger": "#ff5555",
-        "success": "#50fa7b",
-        "warning": "#ffb86c",
-        "info": "#8be9fd",
-        "border-radius": "10px",
-        "cli": {
-            "primary": "\033[96m",
-            "success": "\033[92m",
-            "danger": "\033[91m",
-            "warning": "\033[93m",
-            "reset": "\033[0m"
-        }
     }
-}
-
-# Group mapping for theme (adjust as needed)
-GROUP_THEME_DEFAULTS = {
-    "lnmtadm": "starbase",
-    "lnmt": "nord",
-    "lnmtv": "gruvbox",
 }
 
 def get_theme(theme_key="dark"):
@@ -227,32 +201,11 @@ def list_theme_names():
 
 def theme_css_vars(theme_key="dark"):
     theme = get_theme(theme_key)
-    css_vars = {
-        "primary": theme["primary"],
-        "background": theme["background"],
-        "foreground": theme["foreground"],
-        "accent": theme["accent"],
-        "danger": theme["danger"],
-        "success": theme["success"],
-        "warning": theme["warning"],
-        "info": theme["info"],
-        "border-radius": theme["border-radius"],
-    }
-    return ":root {\n" + "\n".join([f"  --color-{k}: {v};" for k, v in css_vars.items()]) + "\n}"
+    return ":root {\n" + "\n".join([f"  --color-{k}: {v};" for k, v in theme.items() if k != "cli" and k != "name"]) + "\n}"
 
 def cli_color(text, style="primary", theme_key="dark"):
-    theme = get_theme(theme_key)
-    color = theme['cli'].get(style, "")
-    reset = theme['cli'].get('reset', "")
-    return f"{color}{text}{reset}"
+    return f"{THEMES.get(theme_key, THEMES['dark'])['cli'].get(style, '')}{text}{THEMES[theme_key]['cli']['reset']}"
 
 def inject_theme_into_html(html, theme_key="dark"):
     css = theme_css_vars(theme_key)
     return html.replace("<!--THEME_VARS-->", f"<style>{css}</style>")
-
-def get_cli_theme_for_group(groups):
-    # Pass a set/list of group names, returns first match or default
-    for group in groups:
-        if group in GROUP_THEME_DEFAULTS:
-            return GROUP_THEME_DEFAULTS[group]
-    return "dark"

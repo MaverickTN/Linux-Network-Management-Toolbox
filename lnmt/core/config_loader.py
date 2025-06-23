@@ -1,81 +1,113 @@
-import os
+# lnmt/core/config_loader.py
+
 import json
-import shutil
 from pathlib import Path
-import datetime
+import shutil
+import time
 
-CONFIG_DIR = Path("/etc/lnmt")
-CONFIG_FILE = CONFIG_DIR / "server_config.json"
-CONFIG_BACKUP_DIR = CONFIG_DIR / "backups"
-CONFIG_SEARCH_PATHS = [
-    CONFIG_FILE,
-    Path("/usr/local/etc/lnmt/server_config.json"),
-    Path("./server_config.json")
-]
+CONFIG_FILENAME = "lnmt_config.json"
+CONFIG_DIR = Path.home() / ".lnmt"
+CONFIG_PATH = CONFIG_DIR / CONFIG_FILENAME
+CONFIG_BACKUP_PATH = CONFIG_DIR / f"{CONFIG_FILENAME}.bak"
 
-def find_config_file():
-    for path in CONFIG_SEARCH_PATHS:
-        if path.exists():
-            return path
-    return None
+DEFAULT_CONFIG = {
+    "global_settings": {
+        "wan_interface": "enp1s0",
+        "lan_interface": "enp2s0",
+        "database_retention_days": 14
+    },
+    "system_paths": {
+        "dnsmasq_config_dir": "/etc/dnsmasq.d/",
+        "dnsmasq_leases_file": "/var/lib/misc/dnsmasq.leases",
+        "netplan_config_dir": "/etc/netplan/",
+        "wireguard_config_dir": "/etc/wireguard/",
+        "database_file": str(CONFIG_DIR / "lnmt.sqlite3")
+    },
+    "networks": [],
+    "known_hosts": [],
+    "security": {
+        "tls_cert_path": None,
+        "tls_key_path": None
+    },
+    "web_portal": {
+        "host": "0.0.0.0",
+        "port": 8080,
+        "debug": False
+    },
+    "qos_policies": {
+        "bulk": {
+            "description": "Low Priority (Torrents, Backups)",
+            "priority": 5,
+            "fw_mark": 5,
+            "guaranteed_mbit": 1,
+            "limit_mbit": 100
+        },
+        "normal": {
+            "description": "Normal Priority (Browsing)",
+            "priority": 3,
+            "fw_mark": 3,
+            "guaranteed_mbit": 5,
+            "limit_mbit": 200
+        },
+        "priority": {
+            "description": "High Priority (VoIP, Gaming)",
+            "priority": 1,
+            "fw_mark": 1,
+            "guaranteed_mbit": 10,
+            "limit_mbit": 250
+        }
+    },
+    "pihole": {
+        "enabled": False,
+        "host": "",
+        "api_key": ""
+    },
+    "wireguard": {
+        "enabled": False,
+        "config_dir": "/etc/wireguard/"
+    }
+}
 
-def backup_config(config_path=CONFIG_FILE):
-    CONFIG_BACKUP_DIR.mkdir(parents=True, exist_ok=True)
-    if config_path.exists():
-        ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        backup_path = CONFIG_BACKUP_DIR / f"server_config_{ts}.json"
-        shutil.copy2(config_path, backup_path)
-        return backup_path
-    return None
+def backup_config_file():
+    if CONFIG_PATH.exists():
+        shutil.copy(CONFIG_PATH, CONFIG_BACKUP_PATH)
+        return True
+    return False
 
 def validate_config(config):
-    required_keys = ["global_settings", "system_paths", "networks", "known_hosts",
-                     "security", "web_portal", "qos_policies", "pihole", "wireguard"]
-    for key in required_keys:
+    # Check for critical top-level sections
+    for key in DEFAULT_CONFIG:
         if key not in config:
-            raise ValueError(f"Missing required config key: {key}")
-    # Add more structure/content checks as needed
+            raise ValueError(f"Missing required config section: {key}")
+    # Add further validation logic as needed
     return True
 
-def attempt_repair(config_path):
-    try:
-        # Try to read with errors, attempt to salvage if possible (naive JSON fix)
-        with open(config_path, "r") as f:
-            raw = f.read()
-        # Remove trailing commas (naive, but sometimes helps)
-        raw = raw.replace(",\n}", "\n}").replace(",\n]", "\n]")
-        config = json.loads(raw)
-        validate_config(config)
-        save_config(config, config_path=config_path, backup=False)
-        return config
-    except Exception as e:
-        raise RuntimeError(f"Unable to auto-repair config: {e}")
-
 def load_config():
-    path = find_config_file()
-    if not path:
-        raise FileNotFoundError("No config file found in expected locations.")
-    try:
-        with open(path, "r") as f:
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    if not CONFIG_PATH.exists():
+        save_config(DEFAULT_CONFIG)
+    with open(CONFIG_PATH, "r") as f:
+        try:
             config = json.load(f)
-        validate_config(config)
-        return config
-    except Exception as e:
-        print(f"Config load failed: {e}")
-        print("Attempting auto-repair...")
-        config = attempt_repair(path)
-        print("Auto-repair succeeded.")
-        return config
+            validate_config(config)
+            return config
+        except Exception as e:
+            # Attempt to auto-restore from backup if possible
+            if CONFIG_BACKUP_PATH.exists():
+                shutil.copy(CONFIG_BACKUP_PATH, CONFIG_PATH)
+                with open(CONFIG_PATH, "r") as f2:
+                    config = json.load(f2)
+                validate_config(config)
+                return config
+            else:
+                raise RuntimeError(f"Config file is invalid and no backup exists: {e}")
 
-def save_config(config, config_path=CONFIG_FILE, backup=True):
-    if backup and config_path.exists():
-        backup_config(config_path)
-    validate_config(config)
-    os.makedirs(config_path.parent, exist_ok=True)
+def save_config(config, config_path=CONFIG_PATH):
+    backup_config_file()
     with open(config_path, "w") as f:
         json.dump(config, f, indent=2)
+    return True
 
-def list_backups():
-    if not CONFIG_BACKUP_DIR.exists():
-        return []
-    return sorted(CONFIG_BACKUP_DIR.glob("server_config_*.json"), reverse=True)
+def find_config_file():
+    # Always return main config path for now
+    return str(CONFIG_PATH)

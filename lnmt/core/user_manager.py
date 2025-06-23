@@ -5,94 +5,86 @@ import pwd
 import grp
 import json
 from pathlib import Path
+from lnmt.core.theme_manager import get_theme
 
-LNMT_GROUPS = ["lnmtadm", "lnmt", "lnmtv"]
-PROFILE_DIR = Path("/etc/lnmt/user_profiles")
+DB_PATH = Path.home() / ".lnmt" / "lnmt_users.json"
+REQUIRED_GROUPS = {
+    "admin": "lnmtadm",
+    "operator": "lnmt",
+    "viewer": "lnmtv"
+}
 
-def user_exists_on_host(username):
-    try:
-        pwd.getpwnam(username)
-        return True
-    except KeyError:
-        return False
+def _get_system_users():
+    return {u.pw_name for u in pwd.getpwall()}
 
-def user_group_memberships(username):
-    # Returns a set of all UNIX groups for the user
-    groups = set()
-    try:
-        pw = pwd.getpwnam(username)
-        # primary group
-        groups.add(grp.getgrgid(pw.pw_gid).gr_name)
-        # supplementary groups
-        for g in grp.getgrall():
-            if username in g.gr_mem:
-                groups.add(g.gr_name)
-    except Exception:
-        pass
-    return groups
+def _ensure_db():
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    if not DB_PATH.exists():
+        with open(DB_PATH, "w") as f:
+            json.dump({}, f)
 
-def user_can_access_cli(username):
-    # Must be in one of the LNMT groups
-    groups = user_group_memberships(username)
-    return any(g in groups for g in LNMT_GROUPS)
+def _load_users():
+    _ensure_db()
+    with open(DB_PATH, "r") as f:
+        return json.load(f)
 
-def user_access_level(username):
-    # Returns 'admin', 'operator', or 'viewer', or None if not permitted
-    groups = user_group_memberships(username)
-    if "lnmtadm" in groups:
-        return "admin"
-    elif "lnmt" in groups:
-        return "operator"
-    elif "lnmtv" in groups:
-        return "viewer"
-    else:
-        return None
+def _save_users(users):
+    with open(DB_PATH, "w") as f:
+        json.dump(users, f, indent=2)
 
-def get_profile_path(username):
-    PROFILE_DIR.mkdir(parents=True, exist_ok=True)
-    return PROFILE_DIR / f"{username}.json"
-
-def get_user_profile(username):
-    p = get_profile_path(username)
-    if p.exists():
-        try:
-            with open(p, "r") as f:
-                return json.load(f)
-        except Exception:
-            # Corrupted profile, backup and create default
-            p.rename(str(p) + ".corrupt")
-    # Create a default profile if not found or corrupt
-    default = default_profile(username)
-    save_user_profile(username, default)
-    return default
-
-def save_user_profile(username, profile):
-    p = get_profile_path(username)
-    with open(p, "w") as f:
-        json.dump(profile, f, indent=2)
-
-def check_or_create_auto_profile(username):
-    """Creates a default profile for a valid system user if not present."""
-    p = get_profile_path(username)
-    if not p.exists():
-        profile = default_profile(username)
-        save_user_profile(username, profile)
-
-def default_profile(username):
-    return {
-        "username": username,
-        "email": "",
-        "access": user_access_level(username),
-        "theme": "dark",
-        "notify": {
-            "on_login": True,
-            "on_schedule": True,
-            "on_job_event": True,
-        },
-        "custom_theme": {},
-        "contact_methods": []
+def create_user(username, email=None, group=None, theme="dark"):
+    system_users = _get_system_users()
+    if username not in system_users:
+        raise ValueError(f"User {username} does not exist on this system.")
+    users = _load_users()
+    if username in users:
+        raise ValueError(f"User profile for {username} already exists.")
+    group = group or get_user_group(username)
+    users[username] = {
+        "email": email or "",
+        "group": group,
+        "theme": theme
     }
+    _save_users(users)
+    return users[username]
 
-def can_create_web_user(username):
-    # Prevent creating web users that shadow UNIX users
-    return not user_exists_on_host(username)
+def get_user_group(username):
+    for role, group in REQUIRED_GROUPS.items():
+        try:
+            members = grp.getgrnam(group).gr_mem
+            if username in members:
+                return role
+        except KeyError:
+            continue
+    return None
+
+def user_has_cli_access(username):
+    return get_user_group(username) in ("admin", "operator", "viewer")
+
+def get_user(username):
+    users = _load_users()
+    return users.get(username)
+
+def auto_create_user_profile(username):
+    system_users = _get_system_users()
+    if username not in system_users:
+        return None
+    users = _load_users()
+    if username not in users:
+        group = get_user_group(username)
+        theme = "dark"
+        users[username] = {"email": "", "group": group, "theme": theme}
+        _save_users(users)
+    return users[username]
+
+def set_user_theme(username, theme_key):
+    users = _load_users()
+    if username not in users:
+        raise ValueError("User profile does not exist.")
+    if theme_key not in get_theme():
+        raise ValueError("Invalid theme selected.")
+    users[username]["theme"] = theme_key
+    _save_users(users)
+
+def list_all_users():
+    return _load_users()
