@@ -3,88 +3,63 @@
 import os
 import pwd
 import grp
-import json
-from pathlib import Path
-from lnmt.core.theme_manager import get_theme
 
-DB_PATH = Path.home() / ".lnmt" / "lnmt_users.json"
 REQUIRED_GROUPS = {
     "admin": "lnmtadm",
     "operator": "lnmt",
-    "viewer": "lnmtv"
+    "view": "lnmtv"
 }
 
-def _get_system_users():
-    return {u.pw_name for u in pwd.getpwall()}
+def get_system_groups(username):
+    groups = [g.gr_name for g in grp.getgrall() if username in g.gr_mem]
+    try:
+        primary_group = grp.getgrgid(pwd.getpwnam(username).pw_gid).gr_name
+        if primary_group not in groups:
+            groups.append(primary_group)
+    except Exception:
+        pass
+    return groups
 
-def _ensure_db():
-    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    if not DB_PATH.exists():
-        with open(DB_PATH, "w") as f:
-            json.dump({}, f)
+def is_system_user(username):
+    try:
+        pwd.getpwnam(username)
+        return True
+    except KeyError:
+        return False
 
-def _load_users():
-    _ensure_db()
-    with open(DB_PATH, "r") as f:
-        return json.load(f)
-
-def _save_users(users):
-    with open(DB_PATH, "w") as f:
-        json.dump(users, f, indent=2)
-
-def create_user(username, email=None, group=None, theme="dark"):
-    system_users = _get_system_users()
-    if username not in system_users:
-        raise ValueError(f"User {username} does not exist on this system.")
-    users = _load_users()
-    if username in users:
-        raise ValueError(f"User profile for {username} already exists.")
-    group = group or get_user_group(username)
-    users[username] = {
-        "email": email or "",
-        "group": group,
-        "theme": theme
-    }
-    _save_users(users)
-    return users[username]
-
-def get_user_group(username):
-    for role, group in REQUIRED_GROUPS.items():
-        try:
-            members = grp.getgrnam(group).gr_mem
-            if username in members:
-                return role
-        except KeyError:
-            continue
-    return None
-
-def user_has_cli_access(username):
-    return get_user_group(username) in ("admin", "operator", "viewer")
-
-def get_user(username):
-    users = _load_users()
-    return users.get(username)
-
-def auto_create_user_profile(username):
-    system_users = _get_system_users()
-    if username not in system_users:
+def get_user_role(username):
+    groups = get_system_groups(username)
+    if REQUIRED_GROUPS["admin"] in groups:
+        return "admin"
+    elif REQUIRED_GROUPS["operator"] in groups:
+        return "operator"
+    elif REQUIRED_GROUPS["view"] in groups:
+        return "view"
+    else:
         return None
-    users = _load_users()
-    if username not in users:
-        group = get_user_group(username)
-        theme = "dark"
-        users[username] = {"email": "", "group": group, "theme": theme}
-        _save_users(users)
-    return users[username]
 
-def set_user_theme(username, theme_key):
-    users = _load_users()
-    if username not in users:
-        raise ValueError("User profile does not exist.")
-    if theme_key not in get_theme():
-        raise ValueError("Invalid theme selected.")
-    users[username]["theme"] = theme_key
-    _save_users(users)
+def can_user_access_cli(username):
+    role = get_user_role(username)
+    return role in ("admin", "operator", "view")
 
-def list_all_users():
-    return _load_users()
+def auto_create_profile(username, user_db):
+    """
+    Auto-creates a profile in the database for a new system user if not present.
+    Skips creation for root, and disables creation if username already exists in user_db.
+    """
+    if username == "root":
+        return
+    if not is_system_user(username):
+        return
+    if user_db.get(username):
+        return
+    user_db[username] = {
+        "username": username,
+        "role": get_user_role(username),
+        "theme": "dark",
+        "notifications": {
+            "toast": True,
+            "email": False
+        }
+    }
+    return user_db[username]

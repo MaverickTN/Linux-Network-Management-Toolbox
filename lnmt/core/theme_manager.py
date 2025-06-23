@@ -193,32 +193,30 @@ THEMES = {
     }
 }
 
-def get_theme(theme_key=None):
-    if theme_key:
-        return THEMES.get(theme_key, THEMES["dark"])
-    return THEMES
+def get_theme(theme_key="dark"):
+    return THEMES.get(theme_key, THEMES["dark"])
 
 def list_theme_names():
     return {k: v["name"] for k, v in THEMES.items()}
 
 def theme_css_vars(theme_key="dark"):
-    theme = THEMES.get(theme_key, THEMES["dark"])
-    css_vars = [
-        f"--color-primary: {theme['primary']}",
-        f"--color-background: {theme['background']}",
-        f"--color-foreground: {theme['foreground']}",
-        f"--color-accent: {theme['accent']}",
-        f"--color-danger: {theme['danger']}",
-        f"--color-success: {theme['success']}",
-        f"--color-warning: {theme['warning']}",
-        f"--color-info: {theme['info']}",
-        f"--border-radius: {theme['border-radius']}"
+    theme = get_theme(theme_key)
+    css = [
+        f"--color-primary: {theme['primary']};",
+        f"--color-background: {theme['background']};",
+        f"--color-foreground: {theme['foreground']};",
+        f"--color-accent: {theme['accent']};",
+        f"--color-danger: {theme['danger']};",
+        f"--color-success: {theme['success']};",
+        f"--color-warning: {theme['warning']};",
+        f"--color-info: {theme['info']};",
+        f"--border-radius: {theme['border-radius']};"
     ]
-    return ":root {\n" + "\n".join([f"  {line};" for line in css_vars]) + "\n}"
+    return ":root {\n  " + "\n  ".join(css) + "\n}"
 
 def cli_color(text, style="primary", theme_key="dark"):
-    cli = THEMES.get(theme_key, THEMES["dark"])["cli"]
-    return f"{cli.get(style, '')}{text}{cli['reset']}"
+    t = THEMES.get(theme_key, THEMES['dark'])['cli']
+    return f"{t.get(style, '')}{text}{t['reset']}"
 
 def inject_theme_into_html(html, theme_key="dark"):
     css = theme_css_vars(theme_key)
