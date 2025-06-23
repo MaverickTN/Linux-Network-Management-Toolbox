@@ -1,4 +1,4 @@
-# inetctl/core/notifications.py
+# lnmt/core/notifications.py
 
 import threading
 import json
@@ -63,7 +63,7 @@ def process_notifications(handlers=None, blocking=False):
 
 def print_notification(event):
     """Default handler: print to CLI (used for debugging or simple notifications)."""
-    from inetctl.theme import cli_color, get_theme
+    from lnmt.theme import cli_color, get_theme
     theme = get_theme()
     color = event.level
     msg = f"[{event.timestamp}]"

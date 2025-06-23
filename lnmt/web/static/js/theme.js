@@ -1,4 +1,4 @@
-// inetctl/static/js/theme.js
+// lnmt/static/js/theme.js
 
 document.addEventListener("DOMContentLoaded", function() {
   let themeSelect = document.getElementById("theme-select");

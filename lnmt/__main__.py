@@ -2,13 +2,13 @@ import typer
 import os
 import sys
 from getpass import getuser
-from inetctl.cli.config import app as config_app
-from inetctl.cli.user_cli import app as user_app
-from inetctl.cli.schedule_cli import app as schedule_app
-from inetctl.cli.reservation_cli import app as reservation_app
-from inetctl.cli.blocklist_cli import app as blocklist_app
-from inetctl.theme import get_theme, THEMES
-from inetctl.core.user import valid_group_for_cli
+from lnmt.cli.config import app as config_app
+from lnmt.cli.user_cli import app as user_app
+from lnmt.cli.schedule_cli import app as schedule_app
+from lnmt.cli.reservation_cli import app as reservation_app
+from lnmt.cli.blocklist_cli import app as blocklist_app
+from lnmt.theme import get_theme, THEMES
+from lnmt.core.user import valid_group_for_cli
 
 cli = typer.Typer(
     help="Linux Network Management Toolbox (LNMT): Unified CLI interface.",
@@ -30,7 +30,7 @@ def check_user_and_theme():
         raise typer.Exit(1)
     # Set CLI colors based on user profile (if set)
     try:
-        from inetctl.core.config_loader import load_config
+        from lnmt.core.config_loader import load_config
         config = load_config()
         user_profiles = config.get("user_profiles", [])
         user_profile = next((u for u in user_profiles if u["username"] == user), None)

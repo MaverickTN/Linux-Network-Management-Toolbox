@@ -1,9 +1,9 @@
-# inetctl/web/routes/home.py
+# lnmt/web/routes/home.py
 
 from flask import Blueprint, render_template, request
-from inetctl.core.dnsmasq import get_active_assignments
-from inetctl.core.netplan import get_vlan_subnets
-from inetctl.theme import get_theme
+from lnmt.core.dnsmasq import get_active_assignments
+from lnmt.core.netplan import get_vlan_subnets
+from lnmt.theme import get_theme
 
 home_bp = Blueprint('home', __name__)
 

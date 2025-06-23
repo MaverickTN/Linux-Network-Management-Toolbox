@@ -1,4 +1,4 @@
-# inetctl/auth.py
+# lnmt/auth.py
 
 import os
 import pwd
@@ -7,7 +7,7 @@ import pam
 from functools import wraps
 from flask import session, redirect, url_for, flash, g
 
-from inetctl.theme import get_cli_theme_for_group
+from lnmt.theme import get_cli_theme_for_group
 
 LNMT_GROUPS = {
     "admin": "lnmtadm",

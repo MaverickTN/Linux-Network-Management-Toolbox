@@ -1,4 +1,4 @@
-# inetctl/core/netplan.py
+# lnmt/core/netplan.py
 
 import yaml
 import os

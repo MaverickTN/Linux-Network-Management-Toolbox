@@ -1,11 +1,11 @@
-# inetctl/web/routes/host.py
+# lnmt/web/routes/host.py
 
 from flask import Blueprint, request, jsonify, abort, render_template
-from inetctl.auth import require_login, require_admin
-from inetctl.db import get_host_by_mac, update_host, delete_host, get_all_hosts
-from inetctl.job_queue_service import enqueue_job
-from inetctl.core.dnsmasq import refresh_dhcp
-from inetctl.theme import get_theme
+from lnmt.auth import require_login, require_admin
+from lnmt.db import get_host_by_mac, update_host, delete_host, get_all_hosts
+from lnmt.job_queue_service import enqueue_job
+from lnmt.core.dnsmasq import refresh_dhcp
+from lnmt.theme import get_theme
 
 bp = Blueprint('host', __name__, url_prefix='/api/host')
 
@@ -82,6 +82,6 @@ def allow_host(mac):
 def qos_profiles():
     """Return list of QoS profiles (for editing)."""
     # Assume defined in config or database
-    from inetctl.core.config_loader import load_config
+    from lnmt.core.config_loader import load_config
     cfg = load_config()
     return jsonify(cfg.get("qos_policies", {}))

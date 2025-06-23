@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 from typing import Dict, Any
 
-USER_PROFILES_PATH = Path("/etc/inetctl/user_profiles.json")
+USER_PROFILES_PATH = Path("/etc/lnmt/user_profiles.json")
 REQUIRED_GROUPS = {"lnmtadm", "lnmt", "lnmtv"}
 DEFAULT_THEME = "dark"
 DEFAULT_NOTIFICATIONS = ["critical", "warning", "status"]

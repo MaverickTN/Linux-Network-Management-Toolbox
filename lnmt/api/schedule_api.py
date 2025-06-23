@@ -1,11 +1,11 @@
 from flask import Blueprint, request, jsonify
-from inetctl.core.schedule import (
+from lnmt.core.schedule import (
     get_schedules_for_host,
     add_schedule_block,
     update_schedule_block,
     remove_schedule_block,
 )
-from inetctl.core.logging_service import log_event
+from lnmt.core.logging_service import log_event
 from flask_login import login_required, current_user
 
 bp = Blueprint('schedule_api', __name__, url_prefix='/api/schedule')

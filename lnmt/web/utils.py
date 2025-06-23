@@ -9,7 +9,7 @@ def get_logged_in_user():
 def get_user_theme(user=None):
     # Placeholder for fetching user's preferred theme
     # In production, pull from user profile db or config
-    from inetctl.theme import get_theme
+    from lnmt.theme import get_theme
     if not user:
         user = get_logged_in_user()
     # For now, use 'dark' for root, else 'light'

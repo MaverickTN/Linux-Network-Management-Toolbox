@@ -1,11 +1,11 @@
-# inetctl/core/job_queue.py
+# lnmt/core/job_queue.py
 
 import threading
 import time
 import uuid
 from collections import deque
 
-from inetctl.core.logging import log_queue_event
+from lnmt.core.logging import log_queue_event
 
 class JobStatus:
     PENDING = "pending"

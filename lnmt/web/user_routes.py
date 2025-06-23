@@ -1,8 +1,8 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, session, jsonify
 from flask_login import login_required, current_user
 import pam
-from inetctl.core import user_profiles
-from inetctl.theme import THEMES, list_theme_names
+from lnmt.core import user_profiles
+from lnmt.theme import THEMES, list_theme_names
 
 user_bp = Blueprint("user", __name__, url_prefix="/user")
 

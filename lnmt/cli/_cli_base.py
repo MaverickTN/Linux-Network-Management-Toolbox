@@ -1,8 +1,8 @@
 import os
 import typer
 import getpass
-from inetctl.utils.auth import allowed_cli_access, get_cli_role
-from inetctl.theme import get_theme, cli_color
+from lnmt.utils.auth import allowed_cli_access, get_cli_role
+from lnmt.theme import get_theme, cli_color
 
 class CLIContext:
     user: str = None

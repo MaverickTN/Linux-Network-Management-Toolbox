@@ -1,6 +1,6 @@
 from flask import Blueprint, request, redirect, url_for, session, flash, render_template
-from inetctl.profile import update_profile, get_profile, list_theme_names
-from inetctl.web.auth import require_auth
+from lnmt.profile import update_profile, get_profile, list_theme_names
+from lnmt.web.auth import require_auth
 
 profile_bp = Blueprint("profile", __name__)
 

@@ -2,7 +2,7 @@ import sqlite3
 import time
 from pathlib import Path
 
-DB_FILE = Path("./inetctl_stats.db")
+DB_FILE = Path("./lnmt_stats.db")
 
 def setup_database():
     """Ensures the event_log table exists and has the username column."""

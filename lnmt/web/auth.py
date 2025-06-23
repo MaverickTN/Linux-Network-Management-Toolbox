@@ -1,9 +1,9 @@
-# inetctl/web/auth.py
+# lnmt/web/auth.py
 
 import os
 from flask import Blueprint, render_template, request, redirect, url_for, session, flash
 from pam import pam
-from inetctl.core.user_manager import (
+from lnmt.core.user_manager import (
     user_exists_on_host,
     user_can_access_cli,
     user_access_level,
@@ -11,7 +11,7 @@ from inetctl.core.user_manager import (
     get_user_profile,
     save_user_profile,
 )
-from inetctl.theme import THEMES, get_theme
+from lnmt.theme import THEMES, get_theme
 
 bp = Blueprint("auth", __name__, url_prefix="/auth")
 

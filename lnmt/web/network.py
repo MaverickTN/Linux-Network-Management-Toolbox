@@ -1,10 +1,10 @@
-# inetctl/web/network.py
+# lnmt/web/network.py
 
 from flask import Blueprint, render_template, request, jsonify, redirect, url_for, flash
-from inetctl.core.netplan import get_all_netplan_interfaces, get_vlan_subnets, apply_netplan_changes
-from inetctl.core.config_loader import load_config, save_config
-from inetctl.core.logging import log_event
-from inetctl.job_queue_service import JobQueueService
+from lnmt.core.netplan import get_all_netplan_interfaces, get_vlan_subnets, apply_netplan_changes
+from lnmt.core.config_loader import load_config, save_config
+from lnmt.core.logging import log_event
+from lnmt.job_queue_service import JobQueueService
 
 network_bp = Blueprint('network', __name__, url_prefix='/network')
 

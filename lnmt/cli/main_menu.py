@@ -1,20 +1,20 @@
 import typer
 import sys
 import os
-from inetctl.core.auth import (
+from lnmt.core.auth import (
     get_logged_in_user, check_access, require_access
 )
-from inetctl.core.theme import get_theme, cli_color, list_theme_names
-from inetctl.core.user_profile import load_user_profile
+from lnmt.core.theme import get_theme, cli_color, list_theme_names
+from lnmt.core.user_profile import load_user_profile
 
 app = typer.Typer(help="Linux Network Management Toolbox CLI")
 
 # CLI modules (to be imported if/when modularized)
-import inetctl.cli.config as config_cli
-import inetctl.cli.schedule as schedule_cli
-import inetctl.cli.reservations as reservations_cli
-import inetctl.cli.blocklist as blocklist_cli
-import inetctl.cli.netplan as netplan_cli
+import lnmt.cli.config as config_cli
+import lnmt.cli.schedule as schedule_cli
+import lnmt.cli.reservations as reservations_cli
+import lnmt.cli.blocklist as blocklist_cli
+import lnmt.cli.netplan as netplan_cli
 
 # Register subcommands
 app.add_typer(config_cli.app, name="config")
@@ -65,7 +65,7 @@ def pick_theme():
     try:
         profile = load_user_profile(username)
         profile["theme"] = selected
-        from inetctl.core.user_profile import save_user_profile
+        from lnmt.core.user_profile import save_user_profile
         save_user_profile(username, profile)
         typer.echo(cli_color(f"Theme set to {theme_names[selected]}.", "success", theme_key=selected))
     except Exception as e:

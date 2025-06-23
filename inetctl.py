@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# inetctl.py
+# lnmt.py
 import typer
 import json
 import os
@@ -20,8 +20,8 @@ LOADED_CONFIG_PATH: Optional[Path] = None
 
 # --- Shorewall Specific Constants ---
 SHOREWALL_SNAT_FILE_PATH_DEFAULT = "/etc/shorewall/snat"
-SHOREWALL_SNAT_MANAGED_BLOCK_START = "# BEGIN INETCTL MANAGED SNAT RULES"
-SHOREWALL_SNAT_MANAGED_BLOCK_END = "# END INETCTL MANAGED SNAT RULES"
+SHOREWALL_SNAT_MANAGED_BLOCK_START = "# BEGIN lnmt MANAGED SNAT RULES"
+SHOREWALL_SNAT_MANAGED_BLOCK_END = "# END lnmt MANAGED SNAT RULES"
 
 # --- Netplan YAML parsing helper for web UI ---
 def get_all_netplan_interfaces(global_settings: Dict[str, Any]) -> list:
@@ -98,17 +98,17 @@ def add_netplan_interface(file_path, section, interface, data):
 # --- Configuration Loading ---
 def find_config_file() -> Optional[Path]:
     """Tries to find the configuration file in predefined locations."""
-    env_path_str = os.environ.get("INETCTL_CONFIG")
+    env_path_str = os.environ.get("lnmt_CONFIG")
     if env_path_str:
         env_path = Path(env_path_str)
         if env_path.exists() and env_path.is_file():
             return env_path.resolve()
         else:
-            typer.echo(typer.style(f"Error: INETCTL_CONFIG set to '{env_path_str}' but file not found or is not a regular file.", fg=typer.colors.RED, bold=True))
+            typer.echo(typer.style(f"Error: lnmt_CONFIG set to '{env_path_str}' but file not found or is not a regular file.", fg=typer.colors.RED, bold=True))
             raise typer.Exit(code=1)
 
     current_dir_config_path = Path("./server_config.json")
-    home_config_path = Path.home() / ".config" / "inetctl" / "server_config.json"
+    home_config_path = Path.home() / ".config" / "lnmt" / "server_config.json"
 
     if current_dir_config_path.exists() and current_dir_config_path.is_file():
         return current_dir_config_path.resolve()
@@ -139,7 +139,7 @@ def load_config(force_reload: bool = False) -> Dict[str, Any]:
     if not config_path:
         if is_init_command or is_web_command:
             return {}
-        typer.echo(typer.style("Error: Configuration file 'server_config.json' not found. Please run 'inetctl config init' first.", fg=typer.colors.RED, bold=True))
+        typer.echo(typer.style("Error: Configuration file 'server_config.json' not found. Please run 'lnmt config init' first.", fg=typer.colors.RED, bold=True))
         raise typer.Exit(code=1)
 
     LOADED_CONFIG_PATH = config_path
@@ -512,8 +512,8 @@ def _reload_shorewall(dry_run: bool):
     except Exception as e:
         typer.echo(typer.style(f"An unexpected error occurred while reloading Shorewall: {e}", fg=typer.colors.RED, bold=True))
 # --- CLI Application Definition ---
-app = typer.Typer(help="inetctl - Your Home Network Management Tool.", no_args_is_help=True)
-config_app = typer.Typer(name="config", help="Manage and view inetctl configuration.", no_args_is_help=True)
+app = typer.Typer(help="lnmt - Your Home Network Management Tool.", no_args_is_help=True)
+config_app = typer.Typer(name="config", help="Manage and view lnmt configuration.", no_args_is_help=True)
 app.add_typer(config_app)
 show_app = typer.Typer(name="show", help="Show various aspects of the network configuration.", no_args_is_help=True)
 app.add_typer(show_app)
@@ -525,7 +525,7 @@ network_app = typer.Typer(name="network", help="Manage network interfaces and fi
 app.add_typer(network_app)
 tc_app = typer.Typer(name="tc", help="Manage Traffic Control (QoS) policies.", no_args_is_help=True)
 app.add_typer(tc_app)
-web_app = typer.Typer(name="web", help="Run the inetctl web portal.", no_args_is_help=True)
+web_app = typer.Typer(name="web", help="Run the lnmt web portal.", no_args_is_help=True)
 app.add_typer(web_app)
 
 @config_app.command("init")
@@ -545,12 +545,12 @@ def config_init(force: bool = typer.Option(False, "--force")):
     if not save_path:
         typer.echo("Choose where to save the new configuration file:")
         typer.echo("1: In the current directory (./server_config.json)")
-        typer.echo(f"2: In the user config directory (~/.config/inetctl/server_config.json)")
+        typer.echo(f"2: In the user config directory (~/.config/lnmt/server_config.json)")
         choice = typer.prompt("Enter choice (1 or 2)", type=int, default=1)
         if choice == 1:
             save_path = Path("./server_config.json")
         elif choice == 2:
-            save_path = Path.home() / ".config" / "inetctl" / "server_config.json"
+            save_path = Path.home() / ".config" / "lnmt" / "server_config.json"
         else:
             typer.echo(typer.style("Invalid choice.", fg=typer.colors.RED))
             raise typer.Exit(1)
@@ -615,7 +615,7 @@ def config_init(force: bool = typer.Option(False, "--force")):
 
 @config_app.command("validate")
 def config_validate():
-    """Validates the inetctl configuration file."""
+    """Validates the lnmt configuration file."""
     global LOADED_CONFIG_PATH 
     try:
         config = load_config(force_reload=True) 
@@ -647,7 +647,7 @@ def config_validate():
 
 @config_app.command("show")
 def config_show(raw: bool = typer.Option(False, "--raw")):
-    """Displays the loaded inetctl configuration."""
+    """Displays the loaded lnmt configuration."""
     config = load_config()
     if raw:
         typer.echo(json.dumps(config, indent=2))
@@ -814,10 +814,10 @@ def dnsmasq_apply_reservations(dry_run: bool = typer.Option(False, "--dry-run"))
 
     files_written = 0
     for vlan_id, lines in reservations_by_vlan.items():
-        filename = f"10-inetctl-reservations-vlan{vlan_id}.conf"
+        filename = f"10-lnmt-reservations-vlan{vlan_id}.conf"
         file_path = dnsmasq_config_dir / filename
         lines.sort() 
-        header = f"# Dnsmasq DHCP reservations for VLAN {vlan_id}\n# Generated by inetctl from {LOADED_CONFIG_PATH}\n"
+        header = f"# Dnsmasq DHCP reservations for VLAN {vlan_id}\n# Generated by lnmt from {LOADED_CONFIG_PATH}\n"
         content = header + "\n".join(lines) + "\n" 
 
         if dry_run:
@@ -1307,7 +1307,7 @@ def print_flask_routes():
 
 @web_app.command("serve")
 def web_serve_cmd():
-    """Starts the inetctl web portal."""
+    """Starts the lnmt web portal."""
     config = load_config()
     web_config = config.get("web_portal", {})
     host = web_config.get("host", "0.0.0.0")
@@ -1317,7 +1317,7 @@ def web_serve_cmd():
     if debug:
         print_flask_routes()
     
-    typer.echo(typer.style(f"Starting inetctl web portal at http://{host}:{port}", fg=typer.colors.GREEN))
+    typer.echo(typer.style(f"Starting lnmt web portal at http://{host}:{port}", fg=typer.colors.GREEN))
     if not find_config_file():
         typer.echo(typer.style("Warning: No config file found.", fg=typer.colors.YELLOW))
         

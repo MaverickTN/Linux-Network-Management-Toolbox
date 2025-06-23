@@ -2,10 +2,10 @@ import typer
 import getpass
 import grp
 import pwd
-from inetctl.core.config_loader import (
+from lnmt.core.config_loader import (
     load_config, save_config, validate_config, backup_config
 )
-from inetctl.core.user import (
+from lnmt.core.user import (
     create_profile_for_host_user, is_host_user, valid_group_for_cli,
     list_profiles, set_profile_theme, set_profile_notifications
 )

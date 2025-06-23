@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify
 from flask_login import login_required, current_user
-from inetctl.core.user import (
+from lnmt.core.user import (
     get_user_profile,
     update_user_profile,
     can_edit,
@@ -9,7 +9,7 @@ from inetctl.core.user import (
     pam_authenticate,
     auto_provision_host_user,
 )
-from inetctl.core.logging_service import log_event
+from lnmt.core.logging_service import log_event
 
 bp = Blueprint("user_api", __name__, url_prefix="/api/user")
 

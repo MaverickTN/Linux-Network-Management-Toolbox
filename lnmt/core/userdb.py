@@ -3,9 +3,9 @@ import pwd
 import grp
 import json
 from pathlib import Path
-from inetctl.utils.auth import user_role, get_user_theme
+from lnmt.utils.auth import user_role, get_user_theme
 
-USER_PROFILE_DIR = Path("/var/lib/inetctl/user_profiles")  # or your preferred directory
+USER_PROFILE_DIR = Path("/var/lib/lnmt/user_profiles")  # or your preferred directory
 
 # Ensure profile dir exists
 USER_PROFILE_DIR.mkdir(parents=True, exist_ok=True)

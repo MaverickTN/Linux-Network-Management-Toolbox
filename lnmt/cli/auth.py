@@ -2,7 +2,7 @@ import os
 import getpass
 import sys
 
-from inetctl.core.user import (
+from lnmt.core.user import (
     pam_authenticate,
     get_access_level,
     cli_theme_for_user,

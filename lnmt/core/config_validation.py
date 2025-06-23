@@ -8,8 +8,8 @@ REQUIRED_TOP_LEVEL_KEYS = [
     "security", "web_portal", "qos_policies", "pihole", "wireguard"
 ]
 
-DEFAULT_CONFIG_PATH = "/etc/inetctl/server_config.json"
-BACKUP_PATH = "/etc/inetctl/server_config.json.bak"
+DEFAULT_CONFIG_PATH = "/etc/lnmt/server_config.json"
+BACKUP_PATH = "/etc/lnmt/server_config.json.bak"
 
 def backup_config(config_path=DEFAULT_CONFIG_PATH):
     """Create a backup of the config file."""

@@ -1,8 +1,8 @@
-# inetctl/web/auth_routes.py
+# lnmt/web/auth_routes.py
 
 from flask import Blueprint, render_template, request, redirect, url_for, session, flash
-from inetctl.core.auth import pam_authenticate, is_system_user, get_user_role
-from inetctl.core.user_profiles import load_user_profile, save_user_profile, get_all_user_profiles
+from lnmt.core.auth import pam_authenticate, is_system_user, get_user_role
+from lnmt.core.user_profiles import load_user_profile, save_user_profile, get_all_user_profiles
 
 auth_bp = Blueprint("auth", __name__)
 

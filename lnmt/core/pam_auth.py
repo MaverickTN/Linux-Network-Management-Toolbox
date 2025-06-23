@@ -1,6 +1,6 @@
 import pam
 import pwd
-from inetctl.core.cli_auth import LNMT_GROUPS
+from lnmt.core.cli_auth import LNMT_GROUPS
 
 def pam_authenticate(username, password):
     p = pam.pam()
@@ -12,7 +12,7 @@ def pam_authenticate(username, password):
     except KeyError:
         return False
     # Check group membership
-    from inetctl.core.cli_auth import get_user_role
+    from lnmt.core.cli_auth import get_user_role
     if get_user_role(username) is None:
         return False
     return True

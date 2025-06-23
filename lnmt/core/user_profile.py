@@ -1,10 +1,10 @@
-# inetctl/core/user_profile.py
+# lnmt/core/user_profile.py
 
 import json
 from pathlib import Path
 import hashlib
 
-USER_PROFILE_PATH = Path("/etc/inetctl/user_profiles.json")
+USER_PROFILE_PATH = Path("/etc/lnmt/user_profiles.json")
 
 def _load_profiles():
     if USER_PROFILE_PATH.exists():

@@ -1,14 +1,14 @@
-# inetctl/web/routes/netplan_routes.py
+# lnmt/web/routes/netplan_routes.py
 
 from flask import Blueprint, render_template, request, flash, redirect, url_for, session, jsonify
-from inetctl.core.netplan import (
+from lnmt.core.netplan import (
     get_all_netplan_interfaces,
     get_netplan_config,
     update_netplan_config,
     apply_netplan,
     validate_netplan_config
 )
-from inetctl.Job_queue_service import JobQueueService
+from lnmt.Job_queue_service import JobQueueService
 
 bp_netplan = Blueprint('netplan', __name__, url_prefix='/netplan')
 

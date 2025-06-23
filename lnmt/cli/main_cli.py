@@ -2,7 +2,7 @@ import typer
 import json
 from typing import Optional
 
-from inetctl.core.hostdb import (
+from lnmt.core.hostdb import (
     list_hosts,
     get_host,
     add_host_reservation,

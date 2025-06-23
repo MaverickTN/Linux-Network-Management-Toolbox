@@ -2,7 +2,7 @@ import os
 import json
 import pwd
 from pathlib import Path
-from inetctl.theme import THEMES
+from lnmt.theme import THEMES
 
 PROFILE_DIR = Path("/etc/lnmt/users")  # Adjust as needed for permissions
 

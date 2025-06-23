@@ -7,11 +7,11 @@ from io import StringIO
 from pathlib import Path
 from typing import Dict, List
 
-from inetctl.core.config_loader import load_config
-from inetctl.core.shorewall import parse_shorewall_interfaces
-from inetctl.core.utils import get_active_leases
+from lnmt.core.config_loader import load_config
+from lnmt.core.shorewall import parse_shorewall_interfaces
+from lnmt.core.utils import get_active_leases
 
-DB_FILE = Path("./inetctl_stats.db")
+DB_FILE = Path("./lnmt_stats.db")
 SYNC_INTERVAL_SECONDS = 15
 DATA_RETENTION_DAYS = 10
 
@@ -67,7 +67,7 @@ def get_active_leases(leases_file_path: str) -> list:
     return leases
 
 def main_loop():
-    print("--- Starting inetctl Data Synchronizer (Zone-based iptaccount) ---")
+    print("--- Starting lnmt Data Synchronizer (Zone-based iptaccount) ---")
     last_purge_time = 0
     while True:
         try:

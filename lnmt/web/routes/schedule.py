@@ -1,9 +1,9 @@
 from flask import Blueprint, render_template, request, jsonify
 from flask_login import login_required, current_user
-from inetctl.core.config_loader import load_config, save_config
-from inetctl.core.user import require_web_group
-from inetctl.core.logging import log_event
-from inetctl.web.utils import toast_notify
+from lnmt.core.config_loader import load_config, save_config
+from lnmt.core.user import require_web_group
+from lnmt.core.logging import log_event
+from lnmt.web.utils import toast_notify
 
 bp = Blueprint("schedule", __name__, url_prefix="/schedule")
 

@@ -1,11 +1,11 @@
-# inetctl/core/theme_manager.py
+# lnmt/core/theme_manager.py
 
-from inetctl.theme import THEMES, get_theme
+from lnmt.theme import THEMES, get_theme
 from flask import session
 
 def get_user_theme_key(username):
     # This should use the user profile DB or config
-    from inetctl.core.user_profile import get_or_create_user_profile
+    from lnmt.core.user_profile import get_or_create_user_profile
     profile, _ = get_or_create_user_profile(username)
     return profile.get("theme", "dark")
 

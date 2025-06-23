@@ -1,7 +1,7 @@
 import typer
 import json
 from pathlib import Path
-from inetctl.core.config_loader import load_config, save_config
+from lnmt.core.config_loader import load_config, save_config
 
 profile_cli = typer.Typer(
     name="profile",

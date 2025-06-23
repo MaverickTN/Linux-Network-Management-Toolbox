@@ -1,4 +1,4 @@
-# inetctl/core/dnsmasq.py
+# lnmt/core/dnsmasq.py
 
 import os
 import re
@@ -7,7 +7,7 @@ from typing import List, Dict, Optional
 
 LEASES_FILE = "/var/lib/misc/dnsmasq.leases"
 CONFIG_DIR = "/etc/dnsmasq.d/"
-logger = logging.getLogger("inetctl.core.dnsmasq")
+logger = logging.getLogger("lnmt.core.dnsmasq")
 
 def parse_leases_file(leases_path: str = LEASES_FILE) -> List[Dict]:
     """

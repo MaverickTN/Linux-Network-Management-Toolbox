@@ -2,8 +2,8 @@ import json
 import shutil
 from pathlib import Path
 
-CONFIG_PATH = Path("/etc/inetctl/server_config.json")
-USER_PROFILES_PATH = Path("/etc/inetctl/user_profiles.json")
+CONFIG_PATH = Path("/etc/lnmt/server_config.json")
+USER_PROFILES_PATH = Path("/etc/lnmt/user_profiles.json")
 
 def backup_file(path):
     backup = path.with_suffix(path.suffix + ".bak")

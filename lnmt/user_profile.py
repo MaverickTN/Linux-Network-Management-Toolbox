@@ -1,4 +1,4 @@
-# inetctl/user_profile.py
+# lnmt/user_profile.py
 
 import json
 import os

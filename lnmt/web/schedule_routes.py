@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify
 from flask_login import login_required, current_user
-from inetctl.core.schedule import (
+from lnmt.core.schedule import (
     get_host_schedules,
     add_schedule_block,
     remove_schedule_block,
@@ -38,5 +38,5 @@ def api_remove_block(host, idx):
 @schedule_bp.route("/all", methods=["GET"])
 @login_required
 def api_all_schedules():
-    from inetctl.core.schedule import full_schedule_for_all_hosts
+    from lnmt.core.schedule import full_schedule_for_all_hosts
     return jsonify(full_schedule_for_all_hosts())

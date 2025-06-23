@@ -2,7 +2,7 @@ import typer
 import json
 from pathlib import Path
 import sys
-from inetctl.core.config_loader import (
+from lnmt.core.config_loader import (
     load_config,
     save_config,
     find_config_file,
@@ -11,7 +11,7 @@ from inetctl.core.config_loader import (
     validate_config,
     get_title,
 )
-from inetctl.theme import THEMES, list_theme_names
+from lnmt.theme import THEMES, list_theme_names
 
 app = typer.Typer(
     name="config",
@@ -19,7 +19,7 @@ app = typer.Typer(
     no_args_is_help=False
 )
 
-DEFAULT_CONFIG_PATH = "/etc/inetctl/server_config.json"
+DEFAULT_CONFIG_PATH = "/etc/lnmt/server_config.json"
 
 def print_t(text, style="primary"):
     theme = THEMES["dark"]  # Could swap for user setting
@@ -178,7 +178,7 @@ def theme_select():
         print_t(f"{i}) {name} ({k})", "primary")
     idx = int(input("Pick a theme number: ").strip()) - 1
     theme = list(themes.keys())[idx]
-    # Persist selection in config or .inetctlrc if needed
+    # Persist selection in config or .lnmtrc if needed
     print_t(f"Selected theme: {themes[theme]}", "success")
 
 @app.command()

@@ -1,15 +1,15 @@
-# inetctl/web/routes/dhcp_routes.py
+# lnmt/web/routes/dhcp_routes.py
 
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
-from inetctl.core.dnsmasq import (
+from lnmt.core.dnsmasq import (
     get_active_leases,
     get_reservations,
     add_reservation,
     remove_reservation,
     reload_dnsmasq
 )
-from inetctl.core.netplan import get_vlan_for_ip
-from inetctl.Job_queue_service import JobQueueService
+from lnmt.core.netplan import get_vlan_for_ip
+from lnmt.Job_queue_service import JobQueueService
 
 bp_dhcp = Blueprint('dhcp', __name__, url_prefix='/dhcp')
 

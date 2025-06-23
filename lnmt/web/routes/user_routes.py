@@ -1,9 +1,9 @@
-# inetctl/web/routes/user_routes.py
+# lnmt/web/routes/user_routes.py
 
 from flask import Blueprint, render_template, request, redirect, url_for, flash, session, jsonify
 from werkzeug.security import generate_password_hash, check_password_hash
-from inetctl.theme import THEMES
-from inetctl.core.user_db import (
+from lnmt.theme import THEMES
+from lnmt.core.user_db import (
     get_current_user,
     update_user_profile,
     change_user_password,

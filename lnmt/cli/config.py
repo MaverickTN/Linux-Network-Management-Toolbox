@@ -4,7 +4,7 @@ from pathlib import Path
 import shutil
 from datetime import datetime
 
-from inetctl.core.config_loader import (
+from lnmt.core.config_loader import (
     load_config,
     save_config,
     find_config_file,

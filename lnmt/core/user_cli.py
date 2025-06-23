@@ -2,7 +2,7 @@ import typer
 from typing import Optional, List
 import getpass
 
-from inetctl.core.user import (
+from lnmt.core.user import (
     get_user_profile,
     save_user_profile,
     list_profiles,
@@ -17,7 +17,7 @@ from inetctl.core.user import (
     pam_authenticate,
     ensure_profiles_for_group_users,
 )
-from inetctl.theme import list_theme_names
+from lnmt.theme import list_theme_names
 
 cli = typer.Typer(
     name="user",

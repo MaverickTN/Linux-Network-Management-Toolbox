@@ -1,7 +1,7 @@
 import json
 from datetime import datetime, timedelta
 
-CONFIG_FILE = "/etc/inetctl/server_config.json"  # Update path if needed
+CONFIG_FILE = "/etc/lnmt/server_config.json"  # Update path if needed
 
 def load_config():
     with open(CONFIG_FILE, "r") as f:

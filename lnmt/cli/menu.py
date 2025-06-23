@@ -2,7 +2,7 @@ import typer
 from typing import Optional
 import sys
 
-from inetctl.cli import config_cli, schedule_cli, reservation_cli, blocklist_cli, user_cli
+from lnmt.cli import config_cli, schedule_cli, reservation_cli, blocklist_cli, user_cli
 
 app = typer.Typer(
     name="lnmt",

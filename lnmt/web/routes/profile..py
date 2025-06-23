@@ -1,11 +1,11 @@
-# inetctl/web/routes/profile.py
+# lnmt/web/routes/profile.py
 
 from flask import Blueprint, render_template, request, redirect, url_for, flash, session
 from flask_login import login_required, current_user
-from inetctl.core.user_profile import (
+from lnmt.core.user_profile import (
     get_or_create_user_profile, update_profile, get_user_theme
 )
-from inetctl.theme import THEMES
+from lnmt.theme import THEMES
 
 profile_bp = Blueprint("profile", __name__, url_prefix="/profile")
 

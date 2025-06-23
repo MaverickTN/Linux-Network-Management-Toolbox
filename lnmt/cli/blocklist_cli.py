@@ -1,5 +1,5 @@
 import typer
-from inetctl.core.config_loader import load_config, save_config, validate_config, backup_config
+from lnmt.core.config_loader import load_config, save_config, validate_config, backup_config
 
 app = typer.Typer(
     name="blocklist",

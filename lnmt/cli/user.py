@@ -1,8 +1,8 @@
 import typer
 import getpass
 import pwd
-from inetctl.core.auth import require_group
-from inetctl.theme import cli_color
+from lnmt.core.auth import require_group
+from lnmt.theme import cli_color
 
 app = typer.Typer(name="user", help="Manage users and permissions")
 

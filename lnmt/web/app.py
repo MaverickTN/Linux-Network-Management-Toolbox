@@ -3,20 +3,20 @@ import sys
 import logging
 from flask import Flask, render_template, request, redirect, url_for, jsonify, session, flash
 from flask_login import LoginManager, login_user, logout_user, current_user, login_required
-from inetctl.web.views import register_blueprints
-from inetctl.core.config_loader import load_config
-from inetctl.core.theme import THEMES, get_theme
-from inetctl.core.user import User, get_user_by_username, pam_authenticate, get_or_create_profile
-from inetctl.core.job_queue_service import job_queue
-from inetctl.core.logger import log_event
-from inetctl.core.notify import send_notification, broadcast_notification
-from inetctl.core.cli_groups import user_is_in_group, required_groups
-from inetctl.core.netplan import get_vlan_list, get_vlan_map
-from inetctl.core.hosts import get_hosts_by_vlan, get_host_data, update_host_config
-from inetctl.core.transfer import get_transfer_history
-from inetctl.core.schedules import get_schedules, validate_schedule, add_schedule_block
-from inetctl.core.validators import validate_config
-from inetctl.core.settings import APP_TITLE
+from lnmt.web.views import register_blueprints
+from lnmt.core.config_loader import load_config
+from lnmt.core.theme import THEMES, get_theme
+from lnmt.core.user import User, get_user_by_username, pam_authenticate, get_or_create_profile
+from lnmt.core.job_queue_service import job_queue
+from lnmt.core.logger import log_event
+from lnmt.core.notify import send_notification, broadcast_notification
+from lnmt.core.cli_groups import user_is_in_group, required_groups
+from lnmt.core.netplan import get_vlan_list, get_vlan_map
+from lnmt.core.hosts import get_hosts_by_vlan, get_host_data, update_host_config
+from lnmt.core.transfer import get_transfer_history
+from lnmt.core.schedules import get_schedules, validate_schedule, add_schedule_block
+from lnmt.core.validators import validate_config
+from lnmt.core.settings import APP_TITLE
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)

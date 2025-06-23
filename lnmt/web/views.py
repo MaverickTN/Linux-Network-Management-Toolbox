@@ -1,6 +1,6 @@
 from flask import Blueprint, render_template, session
-from inetctl.web.auth import require_auth
-from inetctl.profile import get_profile
+from lnmt.web.auth import require_auth
+from lnmt.profile import get_profile
 
 home_bp = Blueprint('home', __name__)
 

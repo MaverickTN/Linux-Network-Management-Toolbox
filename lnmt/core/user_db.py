@@ -3,7 +3,7 @@ from pathlib import Path
 from threading import Lock
 
 # Location for user profiles
-USER_DB_PATH = Path("/etc/inetctl/userdb.json")
+USER_DB_PATH = Path("/etc/lnmt/userdb.json")
 USER_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 _db_lock = Lock()
 

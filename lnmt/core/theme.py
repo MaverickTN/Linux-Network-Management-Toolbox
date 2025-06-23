@@ -1,4 +1,4 @@
-# inetctl/core/theme.py
+# lnmt/core/theme.py
 
 import json
 

@@ -1,17 +1,17 @@
 import typer
 import getpass
 import os
-from inetctl.auth.pam_auth import (
+from lnmt.auth.pam_auth import (
     authenticate_and_initialize,
     list_all_profiles
 )
-from inetctl.theme import cli_color, get_theme
+from lnmt.theme import cli_color, get_theme
 
 # Import CLI modules
-from inetctl.cli.config import app as config_app
-from inetctl.cli.dnsmasq import app as dnsmasq_app
-from inetctl.cli.schedule import app as schedule_app
-from inetctl.cli.tc import app as tc_app
+from lnmt.cli.config import app as config_app
+from lnmt.cli.dnsmasq import app as dnsmasq_app
+from lnmt.cli.schedule import app as schedule_app
+from lnmt.cli.tc import app as tc_app
 # ... import all CLI modules as needed
 
 cli = typer.Typer(

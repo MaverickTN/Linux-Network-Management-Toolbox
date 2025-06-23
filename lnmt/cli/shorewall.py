@@ -1,16 +1,16 @@
 import typer
 import getpass
 
-from inetctl.core.config_loader import load_config
-from inetctl.core.utils import (
+from lnmt.core.config_loader import load_config
+from lnmt.core.utils import (
     run_command, get_shorewall_blacklisted_ips,
     get_active_leases, check_root_privileges,
 )
-from inetctl.core.shorewall import (
+from lnmt.core.shorewall import (
     apply_shorewall_config, generate_accounting_rules,
     generate_mangle_rules,
 )
-from inetctl.core.logger import log_event
+from lnmt.core.logger import log_event
 
 # The main Typer application for this CLI module
 app = typer.Typer(
@@ -62,14 +62,14 @@ def apply_shorewall_full_config(
     )
 ):
     """
-    Generates inetctl-managed Shorewall files and reloads if needed.
+    Generates lnmt-managed Shorewall files and reloads if needed.
     """
     cli_user = getpass.getuser()
     log_event("INFO", "cli:shorewall:apply", "User triggered config apply.", username=cli_user)
     check_root_privileges("apply Shorewall configuration")
     config = load_config()
     
-    typer.echo("Generating inetctl-managed Shorewall files...")
+    typer.echo("Generating lnmt-managed Shorewall files...")
     
     accounting_content = generate_accounting_rules(config)
     mangle_content = generate_mangle_rules(config)
@@ -90,4 +90,4 @@ def apply_shorewall_full_config(
             typer.echo(typer.style(err_msg, fg=typer.colors.RED), err=True)
             raise typer.Exit(code=1)
     else:
-        typer.echo("No changes detected in inetctl-managed files. Nothing to do.")
+        typer.echo("No changes detected in lnmt-managed files. Nothing to do.")

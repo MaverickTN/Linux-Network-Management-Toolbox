@@ -2,7 +2,7 @@ import typer
 from functools import wraps
 import getpass
 import os
-from inetctl.utils.auth import (
+from lnmt.utils.auth import (
     pam_authenticate,
     user_role,
     can_run_cli,

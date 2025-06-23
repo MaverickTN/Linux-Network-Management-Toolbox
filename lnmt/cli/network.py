@@ -1,7 +1,7 @@
 import typer
-from inetctl.core.auth import require_group
-from inetctl.theme import cli_color
-from inetctl.core.netplan import get_all_netplan_interfaces, reload_netplan_config, parse_netplan_config
+from lnmt.core.auth import require_group
+from lnmt.theme import cli_color
+from lnmt.core.netplan import get_all_netplan_interfaces, reload_netplan_config, parse_netplan_config
 
 app = typer.Typer(
     name="network",

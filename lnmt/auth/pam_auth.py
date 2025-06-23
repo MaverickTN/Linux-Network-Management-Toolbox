@@ -2,7 +2,7 @@ import os
 import pwd
 import grp
 import pam  # Requires python-pam package
-from inetctl.core.user_profiles import load_profile, save_profile, DEFAULT_PROFILE
+from lnmt.core.user_profiles import load_profile, save_profile, DEFAULT_PROFILE
 
 # Define group names for access levels
 ADMIN_GROUP = "lnmtadm"

@@ -1,6 +1,6 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, session, jsonify
 import getpass
-from inetctl.core.user import (
+from lnmt.core.user import (
     load_profile,
     save_profile,
     get_access_level,
@@ -12,7 +12,7 @@ from inetctl.core.user import (
     PROFILE_DIR,
     REQUIRED_GROUPS
 )
-from inetctl.theme import THEMES
+from lnmt.theme import THEMES
 
 bp = Blueprint("user", __name__, url_prefix="/user")
 

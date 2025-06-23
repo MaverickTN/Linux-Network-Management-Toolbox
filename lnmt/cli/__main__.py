@@ -1,8 +1,8 @@
 import typer
 
-from inetctl.cli.user import app as user_app
-from inetctl.cli.network import app as network_app
-# You would add more: from inetctl.cli.dnsmasq import app as dnsmasq_app, etc.
+from lnmt.cli.user import app as user_app
+from lnmt.cli.network import app as network_app
+# You would add more: from lnmt.cli.dnsmasq import app as dnsmasq_app, etc.
 
 app = typer.Typer(name="lnmt", help="Linux Network Management Toolbox (CLI)")
 

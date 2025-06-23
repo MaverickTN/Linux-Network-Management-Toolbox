@@ -1,8 +1,8 @@
 import typer
 from datetime import time
 from typing import List
-from inetctl.theme import cli_color, APP_TITLE
-from inetctl.core.config_loader import load_config, save_config
+from lnmt.theme import cli_color, APP_TITLE
+from lnmt.core.config_loader import load_config, save_config
 
 app = typer.Typer(help=cli_color("Manage scheduled blocks for hosts", "primary"))
 

@@ -1,12 +1,12 @@
 import typer
-from inetctl.core.profile import (
+from lnmt.core.profile import (
     get_user_profile,
     update_user_profile,
     list_all_profiles,
     auto_create_profile,
     get_user_role,
 )
-from inetctl.theme import cli_color
+from lnmt.theme import cli_color
 import getpass
 import os
 

@@ -1,7 +1,7 @@
-# inetctl/api/schedule.py
+# lnmt/api/schedule.py
 
 from flask import Blueprint, request, jsonify
-from inetctl.core.config_loader import load_config, save_config
+from lnmt.core.config_loader import load_config, save_config
 from datetime import datetime
 
 schedule_api = Blueprint('schedule_api', __name__)

@@ -1,8 +1,8 @@
-# inetctl/web/user_profile.py
+# lnmt/web/user_profile.py
 
 from flask import Blueprint, render_template, request, redirect, url_for, flash, session, jsonify
 from flask_login import login_required, current_user
-from inetctl.theme import THEMES, get_theme, list_theme_names
+from lnmt.theme import THEMES, get_theme, list_theme_names
 from werkzeug.security import generate_password_hash, check_password_hash
 import sqlite3
 
@@ -10,7 +10,7 @@ user_profile_bp = Blueprint('user_profile', __name__, template_folder='templates
 
 def get_db():
     import os
-    db_path = os.environ.get("INETCTL_DB_PATH", "/etc/inetctl/inetctl.db")
+    db_path = os.environ.get("lnmt_DB_PATH", "/etc/lnmt/lnmt.db")
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     return conn

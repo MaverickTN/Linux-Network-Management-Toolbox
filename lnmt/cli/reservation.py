@@ -4,9 +4,9 @@ import json
 from pathlib import Path
 from datetime import datetime
 
-from inetctl.core.config_loader import load_config, save_config, validate_config
-from inetctl.core.auth import require_group
-from inetctl.theme import cli_color
+from lnmt.core.config_loader import load_config, save_config, validate_config
+from lnmt.core.auth import require_group
+from lnmt.theme import cli_color
 
 app = typer.Typer(
     name="reservation",

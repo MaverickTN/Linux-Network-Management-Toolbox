@@ -1,7 +1,7 @@
 import typer
-from inetctl.job_queue_service import JobQueueService
-from inetctl.theme import cli_color
-from inetctl.core import access as access_core
+from lnmt.job_queue_service import JobQueueService
+from lnmt.theme import cli_color
+from lnmt.core import access as access_core
 
 app = typer.Typer(help="Manage access rules for hosts (blocklist, allowlist).")
 job_queue = JobQueueService()

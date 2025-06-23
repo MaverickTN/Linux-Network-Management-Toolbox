@@ -1,10 +1,10 @@
-# inetctl/web/routes/api.py
+# lnmt/web/routes/api.py
 
 from flask import Blueprint, jsonify, request
-from inetctl.core.dnsmasq import get_host_by_mac
-from inetctl.core.transfer import get_transfer_history
-from inetctl.core.hosts import update_host_config, get_host_schedule_blocks
-from inetctl.theme import get_theme
+from lnmt.core.dnsmasq import get_host_by_mac
+from lnmt.core.transfer import get_transfer_history
+from lnmt.core.hosts import update_host_config, get_host_schedule_blocks
+from lnmt.theme import get_theme
 
 api_bp = Blueprint('api', __name__)
 

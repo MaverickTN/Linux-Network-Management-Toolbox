@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# A script to launch all required inetctl services and manage their shutdown.
+# A script to launch all required lnmt services and manage their shutdown.
 
 # Exit immediately if a command exits with a non-zero status.
 set -e
@@ -10,7 +10,7 @@ DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 
 # Define a cleanup function to be called on script exit.
 cleanup() {
-    echo "Shutting down inetctl services..."
+    echo "Shutting down lnmt services..."
     # The 'pkill -P $$' command is a robust way to kill all child processes of this script.
     # This ensures that when the script stops, sync.py and job_queue_service.py are also stopped.
     pkill -P $$
@@ -24,16 +24,16 @@ trap cleanup SIGINT SIGTERM
 # Change to the script's directory to ensure all relative paths in our python files work.
 cd "$DIR"
 
-echo "Starting inetctl sync daemon..."
+echo "Starting lnmt sync daemon..."
 # Launch the sync daemon in the background.
 /usr/bin/python3 sync.py &
 
-echo "Starting inetctl job queue service..."
+echo "Starting lnmt job queue service..."
 # Launch the job queue service in the background.
 /usr/bin/python3 job_queue_service.py &
 
-echo "Starting inetctl web server (foreground)..."
+echo "Starting lnmt web server (foreground)..."
 # Launch the web server in the foreground. This is crucial.
 # The wrapper script will stay running as long as this command is running,
 # allowing systemd to correctly monitor the service's state.
-/usr/bin/python3 ./inetctl-runner.py web serve
+/usr/bin/python3 ./lnmt-runner.py web serve

@@ -1,18 +1,18 @@
-# inetctl/main.py
+# lnmt/main.py
 
 from flask import Flask, render_template, session, redirect, url_for, request, jsonify, g
 from flask_login import LoginManager, current_user, login_required
 
-from inetctl.web.views.home import home_bp
-from inetctl.web.views.netplan import netplan_bp
-from inetctl.web.views.dnsmasq import dnsmasq_bp
-from inetctl.web.views.schedule import schedule_bp
-from inetctl.web.views.hosts import hosts_bp
-from inetctl.web.views.settings import settings_bp
-from inetctl.core.job_queue import job_queue
-from inetctl.core.theme import get_theme, list_theme_names
+from lnmt.web.views.home import home_bp
+from lnmt.web.views.netplan import netplan_bp
+from lnmt.web.views.dnsmasq import dnsmasq_bp
+from lnmt.web.views.schedule import schedule_bp
+from lnmt.web.views.hosts import hosts_bp
+from lnmt.web.views.settings import settings_bp
+from lnmt.core.job_queue import job_queue
+from lnmt.core.theme import get_theme, list_theme_names
 
-from inetctl.core.auth import user_in_group, get_user_theme, get_current_username
+from lnmt.core.auth import user_in_group, get_user_theme, get_current_username
 
 import os
 

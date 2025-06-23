@@ -1,11 +1,11 @@
-# inetctl/web/host.py
+# lnmt/web/host.py
 
 from flask import Blueprint, render_template, request, jsonify, redirect, url_for, flash
-from inetctl.core.config_loader import load_config, save_config
-from inetctl.core.dnsmasq import get_leases, update_reservation, remove_reservation, block_host, allow_host
-from inetctl.core.schedule import get_host_schedules, add_host_schedule, remove_host_schedule
-from inetctl.core.logging import log_event
-from inetctl.job_queue_service import JobQueueService
+from lnmt.core.config_loader import load_config, save_config
+from lnmt.core.dnsmasq import get_leases, update_reservation, remove_reservation, block_host, allow_host
+from lnmt.core.schedule import get_host_schedules, add_host_schedule, remove_host_schedule
+from lnmt.core.logging import log_event
+from lnmt.job_queue_service import JobQueueService
 
 host_bp = Blueprint('host', __name__, url_prefix='/host')
 

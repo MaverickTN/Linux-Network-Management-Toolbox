@@ -1,7 +1,7 @@
 import typer
-from inetctl.job_queue_service import JobQueueService
-from inetctl.theme import cli_color
-from inetctl.core.dnsmasq import (
+from lnmt.job_queue_service import JobQueueService
+from lnmt.theme import cli_color
+from lnmt.core.dnsmasq import (
     list_leases,
     reload_dnsmasq,
     add_static_lease,

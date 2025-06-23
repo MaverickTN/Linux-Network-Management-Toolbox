@@ -1,4 +1,4 @@
-# inetctl/core/group_access.py
+# lnmt/core/group_access.py
 
 import grp
 import os

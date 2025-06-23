@@ -1,9 +1,9 @@
-# inetctl/web/routes/theme_routes.py
+# lnmt/web/routes/theme_routes.py
 
 from flask import Blueprint, session, request, redirect, url_for, jsonify
 from flask_login import login_required, current_user
-from inetctl.core.theme_manager import THEMES
-from inetctl.core.user_profile import update_user_profile
+from lnmt.core.theme_manager import THEMES
+from lnmt.core.user_profile import update_user_profile
 
 theme_bp = Blueprint("theme", __name__)
 

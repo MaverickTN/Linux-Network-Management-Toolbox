@@ -28,10 +28,10 @@ def user_is_allowed_cli(username=None):
     return get_user_role(username) is not None
 
 def get_user_cli_theme(username=None):
-    # Example: Look for ~/.inetctl_theme or fallback to dark
+    # Example: Look for ~/.lnmt_theme or fallback to dark
     username = username or getpass.getuser()
     home = os.path.expanduser(f"~{username}")
-    theme_file = os.path.join(home, ".inetctl_theme")
+    theme_file = os.path.join(home, ".lnmt_theme")
     if os.path.exists(theme_file):
         with open(theme_file, "r") as f:
             theme = f.read().strip()

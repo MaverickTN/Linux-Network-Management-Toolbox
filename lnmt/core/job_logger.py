@@ -3,7 +3,7 @@ import os
 from datetime import datetime
 from pathlib import Path
 
-JOB_LOG_FILE = "/var/lib/inetctl/job_log.jsonl"
+JOB_LOG_FILE = "/var/lib/lnmt/job_log.jsonl"
 
 def ensure_job_log_file():
     Path(JOB_LOG_FILE).parent.mkdir(parents=True, exist_ok=True)

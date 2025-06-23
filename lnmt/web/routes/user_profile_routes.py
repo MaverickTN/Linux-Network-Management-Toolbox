@@ -1,9 +1,9 @@
-# inetctl/web/routes/user_profile_routes.py
+# lnmt/web/routes/user_profile_routes.py
 
 from flask import Blueprint, render_template, request, redirect, url_for, flash, session, jsonify
 from flask_login import login_required, current_user
-from inetctl.core.user_profile import get_user_profile, update_user_profile, validate_and_update_password
-from inetctl.core.theme_manager import THEMES
+from lnmt.core.user_profile import get_user_profile, update_user_profile, validate_and_update_password
+from lnmt.core.theme_manager import THEMES
 
 user_profile_bp = Blueprint("user_profile", __name__)
 

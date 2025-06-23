@@ -1,4 +1,4 @@
-# inetctl/theme.py
+# lnmt/theme.py
 
 THEMES = {
     "dark": {

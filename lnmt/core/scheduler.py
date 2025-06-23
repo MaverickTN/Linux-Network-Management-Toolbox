@@ -1,4 +1,4 @@
-# inetctl/core/scheduler.py
+# lnmt/core/scheduler.py
 
 import json
 import datetime

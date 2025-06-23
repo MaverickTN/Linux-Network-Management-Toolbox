@@ -5,7 +5,7 @@ from .auth import auth_bp
 def create_app(config=None):
     app = Flask(__name__)
     app.secret_key = "ChangeMeToAStrongSecret"
-    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///inetctl_web.db'
+    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///lnmt_web.db'
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
     # Initialize database

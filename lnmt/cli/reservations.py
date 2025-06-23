@@ -3,9 +3,9 @@ from rich import print as rprint
 from rich.table import Table
 from rich.prompt import Prompt
 from datetime import time
-from inetctl.core.config_loader import load_config, save_config
-from inetctl.core.logging import log_event
-from inetctl.core.user import require_cli_group
+from lnmt.core.config_loader import load_config, save_config
+from lnmt.core.logging import log_event
+from lnmt.core.user import require_cli_group
 
 cli = typer.Typer(
     name="reservations",

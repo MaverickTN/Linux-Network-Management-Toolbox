@@ -1,9 +1,9 @@
 import json
 import os
 from pathlib import Path
-from inetctl.core.user_profile_manager import get_profile
+from lnmt.core.user_profile_manager import get_profile
 
-TOAST_LOG = "/var/lib/inetctl/toast_notifications.log"
+TOAST_LOG = "/var/lib/lnmt/toast_notifications.log"
 
 def log_toast(user, message, level="info"):
     """Append a toast event to the persistent log."""
@@ -47,6 +47,6 @@ def send_toast(user, message, level="info"):
 
 def notify_all_users(message, level="info"):
     """Broadcast a toast to all profiles."""
-    from inetctl.core.user_profile_manager import get_all_profiles
+    from lnmt.core.user_profile_manager import get_all_profiles
     for user in get_all_profiles():
         send_toast(user, message, level)

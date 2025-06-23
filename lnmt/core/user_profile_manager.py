@@ -4,7 +4,7 @@ from pathlib import Path
 import pwd
 import grp
 
-PROFILE_DIR = "/var/lib/inetctl/user_profiles"
+PROFILE_DIR = "/var/lib/lnmt/user_profiles"
 REQUIRED_GROUPS = ["lnmtadm", "lnmt", "lnmtv"]
 
 def ensure_profile_dir():

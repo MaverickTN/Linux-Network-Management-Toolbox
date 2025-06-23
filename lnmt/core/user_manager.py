@@ -1,4 +1,4 @@
-# inetctl/core/user_manager.py
+# lnmt/core/user_manager.py
 
 import os
 import pwd

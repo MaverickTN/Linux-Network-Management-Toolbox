@@ -1,4 +1,4 @@
-# inetctl/core/auth.py
+# lnmt/core/auth.py
 
 import pam
 import pwd

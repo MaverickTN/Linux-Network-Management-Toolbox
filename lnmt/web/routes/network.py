@@ -1,13 +1,13 @@
 from flask import Blueprint, request, jsonify
 from flask_login import login_required
-from inetctl.core.netplan import (
+from lnmt.core.netplan import (
     list_interfaces,
     get_netplan_config,
     set_netplan_config,
     get_vlan_subnets,
     validate_netplan_config,
 )
-from inetctl.Job_queue_service import queue_job
+from lnmt.Job_queue_service import queue_job
 
 bp = Blueprint("network", __name__, url_prefix="/api/network")
 

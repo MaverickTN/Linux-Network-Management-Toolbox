@@ -1,11 +1,11 @@
 import typer
-from inetctl.core.schedule import (
+from lnmt.core.schedule import (
     list_host_schedules,
     add_schedule_block,
     remove_schedule_block,
     validate_schedule_block,
 )
-from inetctl.theme import cli_color
+from lnmt.theme import cli_color
 
 app = typer.Typer(name="schedule", help="Manage host network schedules")
 

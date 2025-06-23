@@ -1,7 +1,7 @@
 import threading
 import queue
 import uuid
-from inetctl.logger import log_queue_event, setup_logging
+from lnmt.logger import log_queue_event, setup_logging
 
 class JobQueueService:
     def __init__(self):

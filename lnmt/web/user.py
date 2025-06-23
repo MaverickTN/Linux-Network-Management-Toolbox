@@ -1,7 +1,7 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, session
-from inetctl.core.auth import get_lnmt_role, username_conflicts_with_system
-from inetctl.theme import list_theme_names
-from inetctl.core.user_profiles import (
+from lnmt.core.auth import get_lnmt_role, username_conflicts_with_system
+from lnmt.theme import list_theme_names
+from lnmt.core.user_profiles import (
     get_user_profile, save_user_profile, current_user, user_profiles
 )
 

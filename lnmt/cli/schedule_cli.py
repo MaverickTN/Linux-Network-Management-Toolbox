@@ -1,6 +1,6 @@
 import typer
 import json
-from inetctl.core.config_loader import load_config, save_config, validate_config, backup_config
+from lnmt.core.config_loader import load_config, save_config, validate_config, backup_config
 from pathlib import Path
 
 app = typer.Typer(

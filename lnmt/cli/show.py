@@ -3,8 +3,8 @@ from typing import Optional
 import typer
 
 # Import from our new core modules
-from inetctl.core.config_loader import load_config
-from inetctl.core.utils import print_item_details
+from lnmt.core.config_loader import load_config
+from lnmt.core.utils import print_item_details
 
 # Define a new Typer application for the 'show' subcommand
 app = typer.Typer(

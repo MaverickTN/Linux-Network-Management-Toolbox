@@ -1,11 +1,11 @@
 import typer
 import getpass
-from inetctl.core.user_profiles import (
+from lnmt.core.user_profiles import (
     load_profile, save_profile, set_theme,
     set_notifications, set_email, list_profiles,
     update_profile
 )
-from inetctl.theme import list_theme_names
+from lnmt.theme import list_theme_names
 
 app = typer.Typer(
     name="profile",

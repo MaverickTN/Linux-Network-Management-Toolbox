@@ -1,12 +1,12 @@
-# inetctl/cli/auth_cli.py
+# lnmt/cli/auth_cli.py
 
 import typer
 import getpass
 import grp
 import pwd
 import os
-from inetctl.core.user_profile import get_or_create_user_profile
-from inetctl.theme import THEMES, cli_color
+from lnmt.core.user_profile import get_or_create_user_profile
+from lnmt.theme import THEMES, cli_color
 
 app = typer.Typer(
     name="auth",
