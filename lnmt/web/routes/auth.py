@@ -1,53 +1,41 @@
-# lnmt/web/routes/auth.py
-
 from flask import Blueprint, render_template, request, redirect, url_for, session, flash
-from flask_login import login_user, logout_user, current_user, login_required
-import pam
-import pwd
-from lnmt.core.user_profile import UserProfile, get_or_create_user_profile, get_system_group_membership
-from lnmt.core.theme_manager import get_theme_names
+from lnmt.core.pam_auth import pam_authenticate
+from lnmt.core.user_manager import get_user, set_user_theme, update_user_profile
+from lnmt.core.theme_manager import get_all_themes
 
-auth_bp = Blueprint('auth', __name__)
+auth_bp = Blueprint("auth", __name__, url_prefix="/auth")
 
-def pam_authenticate(username, password):
-    p = pam.pam()
-    return p.authenticate(username, password)
-
-@auth_bp.route('/login', methods=['GET', 'POST'])
+@auth_bp.route("/login", methods=["GET", "POST"])
 def login():
-    if request.method == 'POST':
-        username = request.form['username'].strip()
-        password = request.form['password']
-        # Only allow logins for real host users
-        try:
-            pwd.getpwnam(username)
-        except KeyError:
-            flash("User does not exist on this system.", "danger")
-            return render_template("login.html", themes=get_theme_names())
-
-        # Authenticate with PAM
+    if request.method == "POST":
+        username = request.form["username"]
+        password = request.form["password"]
         if pam_authenticate(username, password):
-            # Auto-create user profile if needed
-            profile, created = get_or_create_user_profile(username)
-            # Check group membership for access
-            groups = get_system_group_membership(username)
-            allowed = any(g in ["lnmtadm", "lnmt", "lnmtv"] for g in groups)
-            if not allowed:
-                flash("User is not in any permitted network management group (lnmtadm/lnmt/lnmtv).", "danger")
-                return render_template("login.html", themes=get_theme_names())
-            # Flask-login: log user in (custom integration assumed)
-            login_user(profile)
-            flash(f"Welcome, {username}! You are now logged in.", "success")
-            return redirect(url_for('home.dashboard'))
+            session["user"] = username
+            flash("Welcome, {}".format(username), "success")
+            return redirect(url_for("home.index"))
         else:
-            flash("Authentication failed.", "danger")
-            return render_template("login.html", themes=get_theme_names())
-    else:
-        return render_template("login.html", themes=get_theme_names())
+            flash("Login failed", "danger")
+    return render_template("login.html", themes=get_all_themes())
 
-@auth_bp.route('/logout')
-@login_required
+@auth_bp.route("/logout")
 def logout():
-    logout_user()
-    flash("You have been logged out.", "info")
-    return redirect(url_for('auth.login'))
+    session.pop("user", None)
+    flash("Logged out.", "info")
+    return redirect(url_for("auth.login"))
+
+@auth_bp.route("/profile", methods=["GET", "POST"])
+def profile():
+    username = session.get("user")
+    if not username:
+        return redirect(url_for("auth.login"))
+    user = get_user(username)
+    if request.method == "POST":
+        email = request.form.get("email")
+        theme = request.form.get("theme")
+        notif = request.form.get("notification_settings")
+        update_user_profile(username, email=email, theme=theme, notification_settings=notif)
+        set_user_theme(username, theme)
+        flash("Profile updated.", "success")
+        return redirect(url_for("auth.profile"))
+    return render_template("profile.html", user=user, themes=get_all_themes())

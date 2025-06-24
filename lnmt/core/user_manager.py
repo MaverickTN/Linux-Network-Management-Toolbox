@@ -1,78 +1,92 @@
-# lnmt/core/user_manager.py
-
-import sqlite3
-import hashlib
 import os
-from lnmt.core.theme_manager import get_theme_list
+import pwd
+import grp
+import hashlib
+from .database import get_db
 
-USER_DB = os.environ.get('LNMT_USER_DB', '/etc/lnmt/lnmt.db')
+LNMT_GROUPS = {
+    "lnmtadm": "admin",
+    "lnmt": "operator",
+    "lnmtv": "view"
+}
 
-def get_db():
-    conn = sqlite3.connect(USER_DB)
-    conn.row_factory = sqlite3.Row
-    return conn
+def get_host_users():
+    return [u.pw_name for u in pwd.getpwall() if u.pw_uid >= 1000 and 'nologin' not in u.pw_shell]
 
-def get_current_user_profile(username):
-    conn = get_db()
-    c = conn.cursor()
-    c.execute("SELECT * FROM users WHERE username=?", (username,))
+def user_group(username):
+    for group in LNMT_GROUPS.keys():
+        try:
+            if username in grp.getgrnam(group).gr_mem:
+                return LNMT_GROUPS[group]
+        except KeyError:
+            continue
+    return None
+
+def create_profile_if_group_member(username, email=None):
+    if user_group(username):
+        db = get_db()
+        c = db.cursor()
+        c.execute("SELECT * FROM users WHERE username = ?", (username,))
+        if c.fetchone() is None:
+            c.execute(
+                "INSERT INTO users (username, email, group) VALUES (?, ?, ?)",
+                (username, email, user_group(username))
+            )
+            db.commit()
+        db.close()
+        return True
+    return False
+
+def get_user(username):
+    db = get_db()
+    c = db.cursor()
+    c.execute("SELECT * FROM users WHERE username = ?", (username,))
     user = c.fetchone()
-    conn.close()
-    if not user:
-        # Auto-create if host user, else None (should trigger on login only)
-        return {
-            "username": username,
-            "email": "",
-            "notify_options": [],
-            "theme": "dark"
-        }
-    return dict(user)
+    db.close()
+    return user
 
-def update_user_profile(username, email=None, notify_options=None):
-    notify = ",".join(notify_options or [])
-    conn = get_db()
-    c = conn.cursor()
-    c.execute(
-        "UPDATE users SET email=?, notify_options=? WHERE username=?",
-        (email or '', notify, username)
-    )
-    conn.commit()
-    conn.close()
+def set_user_theme(username, theme):
+    db = get_db()
+    c = db.cursor()
+    c.execute("UPDATE users SET theme = ? WHERE username = ?", (theme, username))
+    db.commit()
+    db.close()
 
-def update_user_theme(username, theme):
-    conn = get_db()
-    c = conn.cursor()
-    c.execute(
-        "UPDATE users SET theme=? WHERE username=?",
-        (theme, username)
-    )
-    conn.commit()
-    conn.close()
+def list_users():
+    db = get_db()
+    c = db.cursor()
+    c.execute("SELECT * FROM users")
+    users = c.fetchall()
+    db.close()
+    return users
 
-def validate_and_update_password(username, old_password, new_password, confirm_password):
-    if new_password != confirm_password:
-        return False, "New password and confirmation do not match."
-    conn = get_db()
-    c = conn.cursor()
-    c.execute("SELECT password_hash FROM users WHERE username=?", (username,))
+def set_password(username, new_password):
+    # This example hashes password for local profile, not PAM!
+    hashed = hashlib.sha256(new_password.encode()).hexdigest()
+    db = get_db()
+    c = db.cursor()
+    c.execute("UPDATE users SET password_hash = ? WHERE username = ?", (hashed, username))
+    db.commit()
+    db.close()
+
+def verify_password(username, password):
+    # Only for local fallback, prefer PAM!
+    hashed = hashlib.sha256(password.encode()).hexdigest()
+    db = get_db()
+    c = db.cursor()
+    c.execute("SELECT password_hash FROM users WHERE username = ?", (username,))
     row = c.fetchone()
-    if not row:
-        return False, "User not found."
-    stored_hash = row["password_hash"]
-    if stored_hash and not check_password(old_password, stored_hash):
-        return False, "Old password incorrect."
-    # update password
-    new_hash = hash_password(new_password)
-    c.execute("UPDATE users SET password_hash=? WHERE username=?", (new_hash, username))
-    conn.commit()
-    conn.close()
-    return True, ""
+    db.close()
+    return row and row["password_hash"] == hashed
 
-def get_theme_list():
-    return get_theme_list()
-
-def hash_password(password):
-    return hashlib.sha256(password.encode()).hexdigest()
-
-def check_password(password, hash_value):
-    return hashlib.sha256(password.encode()).hexdigest() == hash_value
+def update_user_profile(username, email=None, theme=None, notification_settings=None):
+    db = get_db()
+    c = db.cursor()
+    if email:
+        c.execute("UPDATE users SET email = ? WHERE username = ?", (email, username))
+    if theme:
+        c.execute("UPDATE users SET theme = ? WHERE username = ?", (theme, username))
+    if notification_settings is not None:
+        c.execute("UPDATE users SET notification_settings = ? WHERE username = ?", (notification_settings, username))
+    db.commit()
+    db.close()

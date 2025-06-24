@@ -1,49 +1,49 @@
 # lnmt/web/user.py
 
 from flask import Blueprint, render_template, request, redirect, url_for, session, flash
-from lnmt.core.user_manager import (
-    get_current_user_profile,
-    update_user_profile,
-    update_user_theme,
-    validate_and_update_password,
-    get_theme_list,
-)
-from flask_login import login_required, current_user
+from lnmt.core.auth import authenticate_user
+from lnmt.core.database import get_connection
+from lnmt.core.user_manager import get_user_theme_from_db
 
-user_bp = Blueprint('user', __name__, url_prefix='/user')
+bp = Blueprint('user', __name__)
 
-@user_bp.route('/profile', methods=['GET', 'POST'])
-@login_required
-def profile():
-    user = get_current_user_profile(current_user.username)
-    themes = get_theme_list()
+@bp.route('/login', methods=['GET', 'POST'])
+def login():
     if request.method == 'POST':
-        # Profile update
-        if 'update_profile' in request.form:
-            email = request.form.get('email')
-            notify_options = request.form.getlist('notify_options')
-            update_user_profile(user['username'], email=email, notify_options=notify_options)
-            flash('Profile updated.', 'success')
-        # Password update
-        elif 'update_password' in request.form:
-            old_pw = request.form.get('old_password')
-            new_pw = request.form.get('new_password')
-            confirm_pw = request.form.get('confirm_password')
-            result, msg = validate_and_update_password(user['username'], old_pw, new_pw, confirm_pw)
-            if result:
-                flash('Password updated.', 'success')
-            else:
-                flash(msg, 'danger')
-        # Theme update
-        elif 'update_theme' in request.form:
-            theme = request.form.get('theme')
-            update_user_theme(user['username'], theme)
-            session['theme'] = theme
-            flash('Theme updated.', 'success')
-        return redirect(url_for('user.profile'))
-    return render_template(
-        'user_profile.html',
-        user=user,
-        themes=themes,
-        selected_theme=session.get('theme', user.get('theme', 'dark'))
-    )
+        username = request.form['username']
+        password = request.form['password']
+        if authenticate_user(username, password):
+            session['username'] = username
+            session['theme'] = get_user_theme_from_db(username)
+            flash('Logged in successfully.', 'success')
+            return redirect(url_for('main.home'))
+        else:
+            flash('Invalid credentials or unauthorized group membership.', 'danger')
+    return render_template('login.html')
+
+@bp.route('/logout')
+def logout():
+    session.pop('username', None)
+    session.pop('theme', None)
+    flash('Logged out.', 'info')
+    return redirect(url_for('user.login'))
+
+@bp.route('/profile', methods=['GET', 'POST'])
+def profile():
+    if 'username' not in session:
+        return redirect(url_for('user.login'))
+    username = session['username']
+    conn = get_connection()
+    c = conn.cursor()
+    if request.method == 'POST':
+        theme = request.form['theme']
+        email = request.form['email']
+        c.execute("UPDATE user_profiles SET theme=?, email=? WHERE username=?", (theme, email, username))
+        conn.commit()
+        session['theme'] = theme
+        flash('Profile updated.', 'success')
+    c.execute("SELECT theme, email FROM user_profiles WHERE username=?", (username,))
+    row = c.fetchone()
+    conn.close()
+    profile = {'theme': row[0] if row else 'dark', 'email': row[1] if row else ''}
+    return render_template('profile.html', profile=profile)

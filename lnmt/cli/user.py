@@ -1,30 +1,50 @@
+# lnmt/cli/user.py
+
 import typer
-import getpass
-import pwd
-from lnmt.core.auth import require_group
-from lnmt.theme import cli_color
+from lnmt.core.database import get_connection
+from lnmt.core.user_manager import auto_create_profile, is_system_user, user_group_membership, get_user_theme_from_db
 
-app = typer.Typer(name="user", help="Manage users and permissions")
+app = typer.Typer(
+    name="user",
+    help="User profile and access management.",
+    no_args_is_help=True
+)
 
-@app.command("current")
-@require_group(["lnmtadm", "lnmt", "lnmtv"])
-def show_current_user():
-    """Show current user and group memberships."""
-    user = getpass.getuser()
-    user_info = pwd.getpwnam(user)
-    print(cli_color(f"User: {user}", "primary"))
-    print(cli_color(f"UID: {user_info.pw_uid}", "info"))
-    print(cli_color(f"GID: {user_info.pw_gid}", "info"))
-    print(cli_color(f"Home: {user_info.pw_dir}", "info"))
+@app.command("list")
+def list_users():
+    """List all user profiles in the database."""
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("SELECT username, theme, email FROM user_profiles")
+    users = c.fetchall()
+    for user in users:
+        typer.echo(f"User: {user[0]}, Theme: {user[1]}, Email: {user[2]}")
 
-@app.command("check")
-@require_group(["lnmtadm"])
-def check_user_group(username: str):
-    """Check if user belongs to one of the LNMT groups."""
-    import grp
-    groups = [g.gr_name for g in grp.getgrall() if username in g.gr_mem]
-    found = [g for g in groups if g in ["lnmtadm", "lnmt", "lnmtv"]]
-    if found:
-        print(cli_color(f"User '{username}' in: {found}", "success"))
+@app.command("create")
+def create_user(username: str, email: str = typer.Option(None, help="User email")):
+    """Manually create a user profile for a system user."""
+    conn = get_connection()
+    if not is_system_user(username):
+        typer.echo(f"User '{username}' does not exist on system.")
+        raise typer.Exit(1)
+    result = auto_create_profile(username, conn)
+    if result:
+        typer.echo(f"Created user profile for '{username}'.")
+        if email:
+            c = conn.cursor()
+            c.execute("UPDATE user_profiles SET email=? WHERE username=?", (email, username))
+            conn.commit()
     else:
-        print(cli_color(f"User '{username}' is not in any LNMT group", "danger"))
+        typer.echo(f"Profile for '{username}' already exists or user not in allowed group.")
+
+@app.command("theme")
+def set_theme(username: str, theme: str):
+    """Set the CLI and web theme for a user."""
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("UPDATE user_profiles SET theme=? WHERE username=?", (theme, username))
+    conn.commit()
+    typer.echo(f"Theme for '{username}' set to {theme}.")
+
+if __name__ == "__main__":
+    app()

@@ -1,14 +1,14 @@
 [Unit]
-Description=Linux Network Management Toolbox (LNMT)
+Description=Linux Network Management Toolbox Web Service
 After=network.target
 
 [Service]
 Type=simple
-User=lnmt
-Group=lnmt
-ExecStart=/usr/local/bin/lnmt-web
-WorkingDirectory=/usr/local/lib/lnmt/
+User=%i
+WorkingDirectory=/home/%i/.config/lnmt
+ExecStart=/usr/bin/python3 /path/to/your/clone/lnmt/web/app.py
 Restart=on-failure
+Environment=LNMT_DB_PATH=/home/%i/.config/lnmt/lnmt.sqlite3
 
 [Install]
 WantedBy=multi-user.target

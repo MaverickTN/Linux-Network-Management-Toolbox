@@ -1,141 +1,217 @@
-# lnmt/core/scheduler.py
+# lnmt/core/theme_manager.py
 
-import json
-import datetime
-from pathlib import Path
-from typing import List, Dict, Any
-
-SCHEDULE_FILE = Path("./data/host_schedules.json")
-
-def load_all_schedules() -> Dict[str, List[dict]]:
-    if not SCHEDULE_FILE.exists():
-        return {}
-    with open(SCHEDULE_FILE, "r") as f:
-        return json.load(f)
-
-def save_all_schedules(schedules: Dict[str, List[dict]]):
-    SCHEDULE_FILE.parent.mkdir(exist_ok=True)
-    with open(SCHEDULE_FILE, "w") as f:
-        json.dump(schedules, f, indent=2)
-
-def get_host_schedules(mac: str) -> List[dict]:
-    all_schedules = load_all_schedules()
-    return all_schedules.get(mac.lower(), [])
-
-def add_host_schedule(mac: str, new_block: dict) -> bool:
-    """
-    new_block should be: { "start": "22:00", "end": "06:00", "days": [0,1,2,3,4,5,6] }
-    Returns True if added, False if overlaps detected.
-    """
-    mac = mac.lower()
-    schedules = load_all_schedules()
-    blocks = schedules.get(mac, [])
-    if has_overlap(new_block, blocks):
-        return False
-    blocks.append(new_block)
-    schedules[mac] = blocks
-    save_all_schedules(schedules)
-    return True
-
-def remove_host_schedule(mac: str, idx: int) -> bool:
-    mac = mac.lower()
-    schedules = load_all_schedules()
-    blocks = schedules.get(mac, [])
-    if 0 <= idx < len(blocks):
-        blocks.pop(idx)
-        schedules[mac] = blocks
-        save_all_schedules(schedules)
-        return True
-    return False
-
-def has_overlap(new_block: dict, blocks: List[dict]) -> bool:
-    """
-    Checks that new_block does not overlap with any existing block in blocks.
-    All times are strings "HH:MM" (24-hour).
-    """
-    for block in blocks:
-        if set(new_block["days"]) & set(block.get("days", [])):
-            # Overlapping days
-            if times_overlap(new_block["start"], new_block["end"], block["start"], block["end"]):
-                return True
-    return False
-
-def times_overlap(start1: str, end1: str, start2: str, end2: str) -> bool:
-    """
-    Returns True if two time ranges overlap.
-    Handles ranges crossing midnight.
-    """
-    s1, e1 = parse_time(start1), parse_time(end1)
-    s2, e2 = parse_time(start2), parse_time(end2)
-    def in_range(t, s, e):
-        if s <= e:
-            return s <= t < e
-        else:
-            # crosses midnight
-            return t >= s or t < e
-    # Check if start of block2 is in block1, or vice versa
-    return in_range(s2, s1, e1) or in_range(s1, s2, e2)
-
-def parse_time(tstr: str) -> int:
-    """Return minutes since midnight for a string 'HH:MM'."""
-    h, m = map(int, tstr.split(":"))
-    return h * 60 + m
-
-def check_if_blacklisted(mac: str, dt: datetime.datetime = None) -> bool:
-    """
-    Returns True if the device should be blacklisted at given datetime (default: now).
-    """
-    dt = dt or datetime.datetime.now()
-    schedules = get_host_schedules(mac)
-    for block in schedules:
-        if dt.weekday() in block.get("days", []):
-            s = parse_time(block["start"])
-            e = parse_time(block["end"])
-            now = dt.hour * 60 + dt.minute
-            # Check block crossing midnight
-            if s < e:
-                if s <= now < e:
-                    return True
-            else:
-                if now >= s or now < e:
-                    return True
-    return False
-
-def cli_print_schedules(mac: str = None):
-    """
-    Print all schedules (or for a specific MAC).
-    """
-    schedules = load_all_schedules()
-    if mac:
-        blocks = schedules.get(mac.lower(), [])
-        print(f"Schedules for {mac}:")
-        for i, b in enumerate(blocks):
-            print(f"  [{i}] {b['start']}-{b['end']} Days: {b['days']}")
-    else:
-        for m, blocks in schedules.items():
-            print(f"{m}:")
-            for i, b in enumerate(blocks):
-                print(f"  [{i}] {b['start']}-{b['end']} Days: {b['days']}")
-
-def cli_add_schedule(mac: str, start: str, end: str, days: str):
-    """
-    CLI helper: days as comma-separated (e.g. "0,1,2,3,4")
-    """
-    block = {
-        "start": start,
-        "end": end,
-        "days": [int(d) for d in days.split(",") if d.strip().isdigit()]
+THEMES = {
+    "dark": {
+        "name": "Dark",
+        "primary": "#3498db",
+        "background": "#23272e",
+        "foreground": "#e0e0e0",
+        "accent": "#f39c12",
+        "danger": "#e74c3c",
+        "success": "#43a047",
+        "warning": "#ff9800",
+        "info": "#007bff",
+        "border-radius": "10px",
+        "cli": {
+            "primary": "\033[94m",
+            "success": "\033[92m",
+            "danger": "\033[91m",
+            "warning": "\033[93m",
+            "reset": "\033[0m"
+        }
+    },
+    "light": {
+        "name": "Light",
+        "primary": "#007bff",
+        "background": "#f5f6fa",
+        "foreground": "#222426",
+        "accent": "#39b385",
+        "danger": "#c0392b",
+        "success": "#388e3c",
+        "warning": "#ffb300",
+        "info": "#1565c0",
+        "border-radius": "10px",
+        "cli": {
+            "primary": "\033[34m",
+            "success": "\033[32m",
+            "danger": "\033[31m",
+            "warning": "\033[33m",
+            "reset": "\033[0m"
+        }
+    },
+    "black": {
+        "name": "Blackout",
+        "primary": "#18ffff",
+        "background": "#000000",
+        "foreground": "#c7c7c7",
+        "accent": "#00bcd4",
+        "danger": "#ff1744",
+        "success": "#00e676",
+        "warning": "#ff9100",
+        "info": "#00b0ff",
+        "border-radius": "10px",
+        "cli": {
+            "primary": "\033[96m",
+            "success": "\033[92m",
+            "danger": "\033[91m",
+            "warning": "\033[93m",
+            "reset": "\033[0m"
+        }
+    },
+    "solarized": {
+        "name": "Solarized",
+        "primary": "#268bd2",
+        "background": "#002b36",
+        "foreground": "#93a1a1",
+        "accent": "#b58900",
+        "danger": "#dc322f",
+        "success": "#859900",
+        "warning": "#cb4b16",
+        "info": "#839496",
+        "border-radius": "10px",
+        "cli": {
+            "primary": "\033[94m",
+            "success": "\033[92m",
+            "danger": "\033[91m",
+            "warning": "\033[93m",
+            "reset": "\033[0m"
+        }
+    },
+    "oceanic": {
+        "name": "Oceanic",
+        "primary": "#29b6f6",
+        "background": "#22313f",
+        "foreground": "#b0bec5",
+        "accent": "#ffd54f",
+        "danger": "#e53935",
+        "success": "#43a047",
+        "warning": "#ffa726",
+        "info": "#0288d1",
+        "border-radius": "10px",
+        "cli": {
+            "primary": "\033[96m",
+            "success": "\033[92m",
+            "danger": "\033[91m",
+            "warning": "\033[93m",
+            "reset": "\033[0m"
+        }
+    },
+    "nord": {
+        "name": "Nord",
+        "primary": "#81A1C1",
+        "background": "#2E3440",
+        "foreground": "#D8DEE9",
+        "accent": "#A3BE8C",
+        "danger": "#BF616A",
+        "success": "#A3BE8C",
+        "warning": "#EBCB8B",
+        "info": "#5E81AC",
+        "border-radius": "10px",
+        "cli": {
+            "primary": "\033[94m",
+            "success": "\033[92m",
+            "danger": "\033[91m",
+            "warning": "\033[93m",
+            "reset": "\033[0m"
+        }
+    },
+    "gruvbox": {
+        "name": "Gruvbox",
+        "primary": "#fabd2f",
+        "background": "#282828",
+        "foreground": "#ebdbb2",
+        "accent": "#b8bb26",
+        "danger": "#fb4934",
+        "success": "#b8bb26",
+        "warning": "#fe8019",
+        "info": "#83a598",
+        "border-radius": "10px",
+        "cli": {
+            "primary": "\033[93m",
+            "success": "\033[92m",
+            "danger": "\033[91m",
+            "warning": "\033[93m",
+            "reset": "\033[0m"
+        }
+    },
+    "material": {
+        "name": "Material",
+        "primary": "#2196f3",
+        "background": "#263238",
+        "foreground": "#ececec",
+        "accent": "#ffeb3b",
+        "danger": "#e53935",
+        "success": "#43a047",
+        "warning": "#fbc02d",
+        "info": "#00bcd4",
+        "border-radius": "10px",
+        "cli": {
+            "primary": "\033[94m",
+            "success": "\033[92m",
+            "danger": "\033[91m",
+            "warning": "\033[93m",
+            "reset": "\033[0m"
+        }
+    },
+    "retro_terminal": {
+        "name": "Retro Terminal",
+        "primary": "#39FF14",
+        "background": "#1a1a1a",
+        "foreground": "#e0e0e0",
+        "accent": "#FFFF00",
+        "danger": "#FF3131",
+        "success": "#00FF41",
+        "warning": "#FFD700",
+        "info": "#00BFFF",
+        "border-radius": "0px",
+        "cli": {
+            "primary": "\033[92m",
+            "success": "\033[92m",
+            "danger": "\033[91m",
+            "warning": "\033[93m",
+            "reset": "\033[0m"
+        }
+    },
+    "matrix": {
+        "name": "Green Matrix",
+        "primary": "#00ff41",
+        "background": "#101010",
+        "foreground": "#bada55",
+        "accent": "#00ff41",
+        "danger": "#ff1133",
+        "success": "#21f300",
+        "warning": "#ffea00",
+        "info": "#43d9ad",
+        "border-radius": "5px",
+        "cli": {
+            "primary": "\033[92m",
+            "success": "\033[92m",
+            "danger": "\033[91m",
+            "warning": "\033[93m",
+            "reset": "\033[0m"
+        }
     }
-    ok = add_host_schedule(mac, block)
-    if ok:
-        print(f"Added schedule block for {mac}: {block}")
-    else:
-        print(f"Failed: schedule overlaps existing blocks.")
+}
 
-def cli_remove_schedule(mac: str, idx: int):
-    ok = remove_host_schedule(mac, idx)
-    if ok:
-        print(f"Removed schedule {idx} for {mac}")
-    else:
-        print(f"Failed: index {idx} not valid for {mac}")
+def get_theme(theme_key="dark"):
+    return THEMES.get(theme_key, THEMES["dark"])
 
+def list_theme_names():
+    return {k: v["name"] for k, v in THEMES.items()}
+
+def theme_css_vars(theme_key="dark"):
+    theme = get_theme(theme_key)
+    css = [f"--color-{k}: {v};" for k, v in theme.items() if k not in ["name", "cli"]]
+    return ":root {\n" + "\n".join([f"  {line}" for line in css]) + "\n}"
+
+def cli_color(text, style="primary", theme_key="dark"):
+    return f"{THEMES.get(theme_key, THEMES['dark'])['cli'].get(style, '')}{text}{THEMES[theme_key]['cli']['reset']}"
+
+def inject_theme_into_html(html, theme_key="dark"):
+    css = theme_css_vars(theme_key)
+    return html.replace("<!--THEME_VARS-->", f"<style>{css}</style>")
+
+def get_user_theme(username):
+    # Logic to load user-specific theme from DB, stub for now
+    # In production, query DB for user's theme
+    return "dark"

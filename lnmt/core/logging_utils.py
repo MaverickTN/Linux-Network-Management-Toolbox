@@ -1,43 +1,28 @@
-# lnmt/core/logging_utils.py
-
-import logging
-from datetime import datetime
+import datetime
 import os
+from .database import get_db
 
-LOG_DIR = "/var/log/lnmt"
-os.makedirs(LOG_DIR, exist_ok=True)
-LOG_FILE = os.path.join(LOG_DIR, "lnmt.log")
+DEFAULT_LOG_FILE = os.environ.get("LNMT_LOG_FILE") or None
 
-logging.basicConfig(
-    filename=LOG_FILE,
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s"
-)
+def log_event(username, action, status, extra=None, log_to_file=DEFAULT_LOG_FILE):
+    # Log to database
+    db = get_db()
+    db.execute(
+        "INSERT INTO logs (username, action, status) VALUES (?, ?, ?)",
+        (username, action, status)
+    )
+    db.commit()
+    db.close()
+    # Optionally also log to file
+    if log_to_file:
+        timestamp = datetime.datetime.now().isoformat()
+        with open(log_to_file, "a") as f:
+            f.write(f"{timestamp} | {username} | {action} | {status} | {extra or ''}\n")
 
-def log_event(message):
-    logging.info(message)
-
-def log_warning(message):
-    logging.warning(message)
-
-def log_error(message):
-    logging.error(message)
-
-def log_cli_action(user, action, details=None):
-    msg = f"[CLI] User: {user}, Action: {action}"
-    if details:
-        msg += f", Details: {details}"
-    log_event(msg)
-
-def log_web_action(user, action, details=None):
-    msg = f"[WEB] User: {user}, Action: {action}"
-    if details:
-        msg += f", Details: {details}"
-    log_event(msg)
-
-def get_recent_logs(lines=100):
-    try:
-        with open(LOG_FILE, "r") as f:
-            return "".join(f.readlines()[-lines:])
-    except Exception:
-        return ""
+def fetch_logs(limit=100):
+    db = get_db()
+    cur = db.cursor()
+    cur.execute("SELECT * FROM logs ORDER BY timestamp DESC LIMIT ?", (limit,))
+    logs = cur.fetchall()
+    db.close()
+    return logs

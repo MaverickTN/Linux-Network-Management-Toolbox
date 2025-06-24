@@ -1,35 +1,18 @@
 # lnmt/core/logger.py
 
 import logging
-import os
-from datetime import datetime
+import sys
 
-LOG_DIR = "/var/log/lnmt"
-os.makedirs(LOG_DIR, exist_ok=True)
-LOG_FILE = os.path.join(LOG_DIR, "lnmt.log")
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-    handlers=[
-        logging.FileHandler(LOG_FILE),
-        logging.StreamHandler()
-    ]
-)
-
-def get_logger(name="lnmt"):
-    return logging.getLogger(name)
-
-def log_event(event, level="info"):
-    logger = get_logger()
-    msg = f"{event} | {datetime.now().isoformat()}"
-    if level == "info":
-        logger.info(msg)
-    elif level == "warning":
-        logger.warning(msg)
-    elif level == "error":
-        logger.error(msg)
-    elif level == "debug":
-        logger.debug(msg)
-    else:
-        logger.info(msg)
+def get_logger(name="LNMT", log_file=None):
+    logger = logging.getLogger(name)
+    if not logger.handlers:
+        logger.setLevel(logging.DEBUG)
+        formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(name)s: %(message)s')
+        stream_handler = logging.StreamHandler(sys.stdout)
+        stream_handler.setFormatter(formatter)
+        logger.addHandler(stream_handler)
+        if log_file:
+            file_handler = logging.FileHandler(log_file)
+            file_handler.setFormatter(formatter)
+            logger.addHandler(file_handler)
+    return logger
