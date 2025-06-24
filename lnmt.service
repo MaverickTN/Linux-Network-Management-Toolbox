@@ -1,14 +1,14 @@
 [Unit]
-Description=Linux Network Management Toolbox Web Service
+Description=Linux Network Management Toolbox Runner
 After=network.target
 
 [Service]
 Type=simple
-User=%i
-WorkingDirectory=/home/%i/.config/lnmt
-ExecStart=/usr/bin/python3 /path/to/your/clone/lnmt/web/app.py
+ExecStart=/usr/bin/python3 /opt/lnmt/lmnt.py
+WorkingDirectory=/opt/lnmt
+Environment=LNMT_CONFIG_DIR=/etc/lnmt
+Environment=LNMT_DB_PATH=/etc/lnmt/lnmt_stats.db
 Restart=on-failure
-Environment=LNMT_DB_PATH=/home/%i/.config/lnmt/lnmt.sqlite3
 
 [Install]
 WantedBy=multi-user.target
