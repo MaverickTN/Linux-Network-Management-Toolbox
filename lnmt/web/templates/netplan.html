@@ -1,0 +1,14 @@
+{% extends 'base.html' %}
+{% block content %}
+<h2 class="mb-4">Netplan Configuration</h2>
+
+<a href="{{ url_for('netplan_routes.netplan_apply') }}" class="btn btn-success mb-3">Validate & Apply</a>
+
+{% for file in files %}
+  <h5>{{ file }}</h5>
+  <pre>{{ configs[file] | tojson(indent=2) }}</pre>
+{% else %}
+  <p>No netplan YAML files found.</p>
+{% endfor %}
+
+{% endblock %}

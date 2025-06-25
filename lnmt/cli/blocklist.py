@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from datetime import datetime
 
-from lnmt.core.auth import require_group
+from lnmt.core.auth import require_access
 from lnmt.theme import cli_color
 
 BLOCKLIST_FILE = Path("/etc/lnmt/blocklist.json")
@@ -28,7 +28,7 @@ def save_blocklist(data):
         json.dump(data, f, indent=2)
 
 @app.command("list")
-@require_group(["lnmtadm", "lnmt"])
+@require_access("operator")
 def list_blocked():
     data = load_blocklist()
     if not data:
@@ -70,7 +70,7 @@ def remove_block(
     typer.echo(cli_color(f"Entry {entry} removed from blocklist.", "success"))
 
 @app.command("menu")
-@require_group(["lnmtadm", "lnmt"])
+@require_access("operator")
 def interactive_menu():
     while True:
         typer.echo(cli_color("\n--- Blocklist Menu ---", "primary"))

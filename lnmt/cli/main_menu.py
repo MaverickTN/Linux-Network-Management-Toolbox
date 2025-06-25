@@ -2,7 +2,7 @@ import typer
 import sys
 import os
 from lnmt.core.auth import (
-    get_logged_in_user, check_access, require_access
+    get_logged_in_user, check_access, require_access, cli_access
 )
 from lnmt.core.theme import get_theme, cli_color, list_theme_names
 from lnmt.core.user_profile import load_user_profile
@@ -26,8 +26,23 @@ app.add_typer(netplan_cli.app, name="netplan")
 def clear_screen():
     os.system("cls" if os.name == "nt" else "clear")
 
-def show_welcome():
+def show_welcome(username):
+    theme = get_theme(username)
+    color = cli_color(theme.get("primary", "cyan"))
+    print(color(f"Welcome, {username}!"))
+    print(color(f"Role: {theme.get('role', 'user')}"))
+    print()
+
+@app.callback()
+def main():
     username = get_logged_in_user()
+    if not cli_access(username):
+        typer.echo(f"Access denied for user: {username}")
+        raise typer.Exit(code=1)
+    clear_screen()
+    load_user_profile(username)
+    show_welcome(username)
+
     try:
         profile = load_user_profile(username)
         theme = get_theme(profile.get("theme", "dark"))

@@ -1,51 +1,76 @@
-import json
+#!/usr/bin/env python3
+
+import sqlite3
+from datetime import datetime
 import os
-from pathlib import Path
 
-PROFILE_DIR = Path("/etc/lnmt_profiles")  # Can be customized/configurable
+DB_PATH = "/etc/lnmt/lnmt_stats.db"
 
-def _profile_path(username):
-    return PROFILE_DIR / f"{username}.json"
+def init_db():
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS user_profiles (
+            username TEXT PRIMARY KEY,
+            role TEXT DEFAULT 'guest',
+            theme TEXT DEFAULT 'default',
+            created TEXT
+        )
+    """)
+    conn.commit()
+    conn.close()
 
 def get_user_profile(username):
-    try:
-        path = _profile_path(username)
-        if not path.exists():
-            return None
-        with open(path) as f:
-            return json.load(f)
-    except Exception:
-        return None
+    init_db()
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+    cur.execute("SELECT username, role, theme, created FROM user_profiles WHERE username = ?", (username,))
+    row = cur.fetchone()
+    conn.close()
+    if row:
+        return {"username": row[0], "role": row[1], "theme": row[2], "created": row[3]}
+    return None
 
 def update_user_profile(username, updates):
-    PROFILE_DIR.mkdir(exist_ok=True)
-    path = _profile_path(username)
-    profile = get_user_profile(username) or {"username": username}
-    profile.update(updates)
-    with open(path, "w") as f:
-        json.dump(profile, f, indent=2)
+    init_db()
+    conn = sqlite3.connect(DB_PATH)
+    cur = conn.cursor()
+    profile = get_user_profile(username)
+    if profile is None:
+        cur.execute("""
+            INSERT INTO user_profiles (username, role, theme, created)
+            VALUES (?, ?, ?, ?)
+        """, (
+            username,
+            updates.get("role", "guest"),
+            updates.get("theme", "default"),
+            datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        ))
+    else:
+        if "role" in updates:
+            cur.execute("UPDATE user_profiles SET role = ? WHERE username = ?", (updates["role"], username))
+        if "theme" in updates:
+            cur.execute("UPDATE user_profiles SET theme = ? WHERE username = ?", (updates["theme"], username))
+    conn.commit()
+    conn.close()
 
-def auto_create_profile(username, default_theme="dark"):
-    # Should be called at first login (if not present)
-    if get_user_profile(username) is None:
-        profile = {
-            "username": username,
-            "theme": default_theme,
-            "email": "",
-            "notify_events": [],
-        }
-        update_user_profile(username, profile)
-        return True
-    return False
+def get_user_role(username):
+    profile = get_user_profile(username)
+    if profile:
+        return profile["role"]
+    return None
 
-def list_all_profiles():
-    profiles = []
-    if not PROFILE_DIR.exists():
-        return profiles
-    for file in PROFILE_DIR.glob("*.json"):
-        try:
-            with open(file) as f:
-                profiles.append(json.load(f))
-        except Exception:
-            continue
-    return profiles
+def set_user_role(username, role):
+    valid_roles = {"admin", "operator", "guest"}
+    if role not in valid_roles:
+        raise ValueError("Invalid role. Choose from: admin, operator, guest.")
+    update_user_profile(username, {"role": role})
+
+def get_user_theme(username):
+    profile = get_user_profile(username)
+    if profile:
+        return profile.get("theme", "default")
+    return "default"
+
+def set_user_theme(username, theme):
+    update_user_profile(username, {"theme": theme})

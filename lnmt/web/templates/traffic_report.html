@@ -1,0 +1,30 @@
+{% extends 'base.html' %}
+{% block content %}
+<h2>Traffic Usage Report</h2>
+
+<form method="get" class="mb-3">
+  <label>Days:</label>
+  <input type="number" name="days" value="{{ days }}" class="form-control form-control-sm" style="width:80px; display:inline-block">
+  <label class="ms-3">VLAN:</label>
+  <input type="text" name="vlan" value="{{ vlan or '' }}" class="form-control form-control-sm" style="width:100px; display:inline-block">
+  <button class="btn btn-primary btn-sm ms-3">Update</button>
+</form>
+
+<table class="table table-sm table-striped">
+  <thead>
+    <tr><th>Time</th><th>VLAN</th><th>IP</th><th>Host</th><th>App</th><th>Seconds</th></tr>
+  </thead>
+  <tbody>
+    {% for row in rows %}
+    <tr>
+      <td>{{ row[0] }}</td>
+      <td>{{ row[1] }}</td>
+      <td>{{ row[2] }}</td>
+      <td>{{ row[3] }}</td>
+      <td>{{ row[4] or '' }}</td>
+      <td>{{ row[5] }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

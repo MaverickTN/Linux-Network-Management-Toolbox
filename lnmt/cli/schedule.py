@@ -1,4 +1,5 @@
 import typer
+from lnmt.core.schedule import remove_expired_blocks
 from lnmt.core.schedule import (
     list_host_schedules,
     add_schedule_block,
@@ -45,3 +46,11 @@ def remove_block(
         print(cli_color(f"Removed block #{index} for {mac}", "success"))
     else:
         print(cli_color(f"Failed to remove block #{index} for {mac}", "danger"))
+
+@app.command("purge-expired")
+def purge_expired(mac: str = typer.Argument(..., help="MAC address to clean up expired schedule blocks")):
+    """
+    Remove expired schedule blocks for a specific MAC address.
+    """
+    remove_expired_blocks(mac)
+    typer.echo(f"Expired schedule blocks removed for {mac}")

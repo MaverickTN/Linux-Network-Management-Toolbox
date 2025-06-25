@@ -1,18 +1,19 @@
-import os
-import getpass
-from flask import session
+#!/usr/bin/env python3
 
-def get_logged_in_user():
-    # If using SSO or custom login, session['user']
-    return session.get('user') or getpass.getuser()
+from flask import redirect, url_for, flash
+from functools import wraps
+from lnmt.web.auth import get_logged_in_role
 
-def get_user_theme(user=None):
-    # Placeholder for fetching user's preferred theme
-    # In production, pull from user profile db or config
-    from lnmt.theme import get_theme
-    if not user:
-        user = get_logged_in_user()
-    # For now, use 'dark' for root, else 'light'
-    if user == "root":
-        return get_theme("dark")
-    return get_theme("light")
+def require_web_role(required):
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            role = get_logged_in_role()
+            if role == "admin":
+                return func(*args, **kwargs)
+            if role == required:
+                return func(*args, **kwargs)
+            flash("Access denied: insufficient permissions", "danger")
+            return redirect(url_for("auth_routes.login"))
+        return wrapper
+    return decorator

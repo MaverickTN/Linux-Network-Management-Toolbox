@@ -1,3 +1,4 @@
+from lnmt.web.utils import require_web_role
 # lnmt/web/routes/home.py
 
 from flask import Blueprint, render_template, request

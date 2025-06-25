@@ -22,3 +22,10 @@ def authorize(username, required_role="operator"):
 
 def cli_access(username):
     return user_has_cli_access(username)
+
+
+def get_user_role_from_profile(username):
+    try:
+        return get_user_role(username)
+    except:
+        return None

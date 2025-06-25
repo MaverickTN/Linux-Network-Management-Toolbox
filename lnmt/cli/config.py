@@ -1,6 +1,7 @@
 # lnmt/cli/config.py
 
 import typer
+from lnmt.core.auth import require_access
 import json
 from pathlib import Path
 
@@ -75,6 +76,7 @@ DEFAULT_CONFIG = {
     }
 }
 
+@require_access("admin")
 @app.command(name="init")
 def init_config(
     force: bool = typer.Option(
@@ -155,6 +157,7 @@ def init_config(
         typer.echo(f"Failed to create configuration file: {e}", err=True)
         raise typer.Exit(code=1)
 
+@require_access("admin")
 @app.command(name="validate")
 def validate():
     """
@@ -167,6 +170,7 @@ def validate():
         typer.echo("Config is invalid or corrupted!", err=True)
         raise typer.Exit(code=1)
 
+@require_access("admin")
 @app.command(name="path")
 def show_config_path():
     """
@@ -179,6 +183,7 @@ def show_config_path():
         typer.echo("No configuration file found.", err=True)
         raise typer.Exit(code=1)
 
+@require_access("admin")
 @app.command(name="get")
 def get_config_value(
     key: str = typer.Argument(..., help="The top-level key to retrieve (e.g., 'global_settings').")

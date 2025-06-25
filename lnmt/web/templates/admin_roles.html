@@ -1,0 +1,62 @@
+{% extends 'base.html' %}
+{% block content %}
+<h2>Role & Permission Manager</h2>
+
+<h4>Existing Roles</h4>
+<ul>
+  {% for id, name in roles %}
+    <li>{{ name }}</li>
+  {% endfor %}
+</ul>
+
+<form action="{{ url_for('roles_bp.add_role') }}" method="post">
+  <input name="name" placeholder="New role name" required>
+  <button type="submit" class="btn btn-primary btn-sm">Add Role</button>
+</form>
+
+<h4 class="mt-4">Permissions</h4>
+<ul>
+  {% for id, name in permissions %}
+    <li>{{ name }}</li>
+  {% endfor %}
+</ul>
+
+<form action="{{ url_for('roles_bp.add_permission') }}" method="post">
+  <input name="name" placeholder="New permission" required>
+  <button type="submit" class="btn btn-secondary btn-sm">Add Permission</button>
+</form>
+
+<h4 class="mt-4">Link Role to Permission</h4>
+<form action="{{ url_for('roles_bp.link_permission') }}" method="post">
+  <select name="role_id">
+    {% for id, name in roles %}<option value="{{ id }}">{{ name }}</option>{% endfor %}
+  </select>
+  <select name="perm_id">
+    {% for id, name in permissions %}<option value="{{ id }}">{{ name }}</option>{% endfor %}
+  </select>
+  <button type="submit" class="btn btn-info btn-sm">Link</button>
+</form>
+
+<h4 class="mt-4">Map System Group to Role</h4>
+<form action="{{ url_for('roles_bp.map_group') }}" method="post">
+  <input name="group" placeholder="system group (e.g. lnmt-admin)" required>
+  <select name="role_id">
+    {% for id, name in roles %}<option value="{{ id }}">{{ name }}</option>{% endfor %}
+  </select>
+  <button type="submit" class="btn btn-warning btn-sm">Map Group</button>
+</form>
+
+<h4 class="mt-4">Group Mappings</h4>
+<ul>
+  {% for group, role in mappings %}
+    <li>{{ group }} → <strong>{{ role }}</strong></li>
+  {% endfor %}
+</ul>
+
+<h4 class="mt-4">Role → Permission Links</h4>
+<ul>
+  {% for role, perm in links %}
+    <li>{{ role }} → {{ perm }}</li>
+  {% endfor %}
+</ul>
+{% endblock %}

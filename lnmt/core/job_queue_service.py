@@ -1,5 +1,3 @@
-# lnmt/core/job_queue_service.py
-
 import threading
 import queue
 import logging
@@ -26,18 +24,16 @@ class JobQueueService:
 
     def add_job(self, func, *args, **kwargs):
         self.queue.put((func, args, kwargs))
-        self.logger.info(f"Job added: {func.__name__} with args={args} kwargs={kwargs}")
+        self.logger.debug(f"Job added to queue: {func.__name__} args={args} kwargs={kwargs}")
 
     def _worker(self):
         while self.running:
             try:
                 func, args, kwargs = self.queue.get(timeout=1)
-                self.logger.info(f"Starting job: {func.__name__}")
-                func(*args, **kwargs)
-                self.logger.info(f"Completed job: {func.__name__} at {datetime.now()}")
+                self.logger.info(f"Executing job: {func.__name__}")
+                result = func(*args, **kwargs)
+                self.logger.debug(f"Job result: {result}")
             except queue.Empty:
                 continue
             except Exception as e:
-                self.logger.error(f"Error in job: {e}")
-
-job_queue = JobQueueService()
+                self.logger.exception(f"Job execution failed: {e}")

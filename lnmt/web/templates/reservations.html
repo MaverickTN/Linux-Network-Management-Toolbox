@@ -1,0 +1,31 @@
+{% extends 'base.html' %}
+{% block content %}
+<h2 class="mb-4">DNS/DHCP Reservations</h2>
+
+<form method="post" action="{{ url_for('reservations_routes.reservation_add') }}" class="mb-4">
+  <div class="row">
+    <div class="col"><input name="mac" class="form-control" placeholder="MAC (AA:BB:CC:DD:EE:FF)" required></div>
+    <div class="col"><input name="hostname" class="form-control" placeholder="Hostname"></div>
+    <div class="col"><input name="ip" class="form-control" placeholder="IP Address"></div>
+    <div class="col"><input name="notes" class="form-control" placeholder="Notes (optional)"></div>
+    <div class="col-auto"><button class="btn btn-success">Save</button></div>
+  </div>
+</form>
+
+<table class="table table-sm table-striped">
+  <thead><tr><th>MAC</th><th>Hostname</th><th>IP</th><th>Notes</th><th>Actions</th></tr></thead>
+  <tbody>
+    {% for row in reservations %}
+    <tr>
+      <td>{{ row[0] }}</td>
+      <td>{{ row[1] }}</td>
+      <td>{{ row[2] }}</td>
+      <td>{{ row[3] }}</td>
+      <td>
+        <a href="{{ url_for('reservations_routes.reservation_delete', mac=row[0]) }}" class="btn btn-sm btn-danger">Delete</a>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}
