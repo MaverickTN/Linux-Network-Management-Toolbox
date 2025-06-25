@@ -1,14 +1,12 @@
 [Unit]
-Description=Linux Network Management Toolbox Runner
+Description=Linux Network Management Toolbox Background Service
 After=network.target
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/python3 /opt/lnmt/lmnt.py
-WorkingDirectory=/opt/lnmt
-Environment=LNMT_CONFIG_DIR=/etc/lnmt
-Environment=LNMT_DB_PATH=/etc/lnmt/lnmt_stats.db
+ExecStart=/usr/local/bin/lnmt --service
 Restart=on-failure
+User=root
 
 [Install]
 WantedBy=multi-user.target
