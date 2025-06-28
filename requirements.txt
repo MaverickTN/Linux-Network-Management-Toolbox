@@ -1,6 +1,5 @@
-typer[all]
+requests
+packaging
 flask
-pyyaml
-ipaddress
-passlib
-Flask-Login
+jinja2
+sqlite3

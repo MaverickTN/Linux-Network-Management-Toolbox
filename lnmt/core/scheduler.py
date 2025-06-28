@@ -1,217 +1,64 @@
-# lnmt/core/theme_manager.py
+import json
+import time
+from datetime import datetime
+from lnmt.db import db
+from lnmt.core import notifier, logger
+from lnmt.util.cron import is_due
 
-THEMES = {
-    "dark": {
-        "name": "Dark",
-        "primary": "#3498db",
-        "background": "#23272e",
-        "foreground": "#e0e0e0",
-        "accent": "#f39c12",
-        "danger": "#e74c3c",
-        "success": "#43a047",
-        "warning": "#ff9800",
-        "info": "#007bff",
-        "border-radius": "10px",
-        "cli": {
-            "primary": "\033[94m",
-            "success": "\033[92m",
-            "danger": "\033[91m",
-            "warning": "\033[93m",
-            "reset": "\033[0m"
-        }
-    },
-    "light": {
-        "name": "Light",
-        "primary": "#007bff",
-        "background": "#f5f6fa",
-        "foreground": "#222426",
-        "accent": "#39b385",
-        "danger": "#c0392b",
-        "success": "#388e3c",
-        "warning": "#ffb300",
-        "info": "#1565c0",
-        "border-radius": "10px",
-        "cli": {
-            "primary": "\033[34m",
-            "success": "\033[32m",
-            "danger": "\033[31m",
-            "warning": "\033[33m",
-            "reset": "\033[0m"
-        }
-    },
-    "black": {
-        "name": "Blackout",
-        "primary": "#18ffff",
-        "background": "#000000",
-        "foreground": "#c7c7c7",
-        "accent": "#00bcd4",
-        "danger": "#ff1744",
-        "success": "#00e676",
-        "warning": "#ff9100",
-        "info": "#00b0ff",
-        "border-radius": "10px",
-        "cli": {
-            "primary": "\033[96m",
-            "success": "\033[92m",
-            "danger": "\033[91m",
-            "warning": "\033[93m",
-            "reset": "\033[0m"
-        }
-    },
-    "solarized": {
-        "name": "Solarized",
-        "primary": "#268bd2",
-        "background": "#002b36",
-        "foreground": "#93a1a1",
-        "accent": "#b58900",
-        "danger": "#dc322f",
-        "success": "#859900",
-        "warning": "#cb4b16",
-        "info": "#839496",
-        "border-radius": "10px",
-        "cli": {
-            "primary": "\033[94m",
-            "success": "\033[92m",
-            "danger": "\033[91m",
-            "warning": "\033[93m",
-            "reset": "\033[0m"
-        }
-    },
-    "oceanic": {
-        "name": "Oceanic",
-        "primary": "#29b6f6",
-        "background": "#22313f",
-        "foreground": "#b0bec5",
-        "accent": "#ffd54f",
-        "danger": "#e53935",
-        "success": "#43a047",
-        "warning": "#ffa726",
-        "info": "#0288d1",
-        "border-radius": "10px",
-        "cli": {
-            "primary": "\033[96m",
-            "success": "\033[92m",
-            "danger": "\033[91m",
-            "warning": "\033[93m",
-            "reset": "\033[0m"
-        }
-    },
-    "nord": {
-        "name": "Nord",
-        "primary": "#81A1C1",
-        "background": "#2E3440",
-        "foreground": "#D8DEE9",
-        "accent": "#A3BE8C",
-        "danger": "#BF616A",
-        "success": "#A3BE8C",
-        "warning": "#EBCB8B",
-        "info": "#5E81AC",
-        "border-radius": "10px",
-        "cli": {
-            "primary": "\033[94m",
-            "success": "\033[92m",
-            "danger": "\033[91m",
-            "warning": "\033[93m",
-            "reset": "\033[0m"
-        }
-    },
-    "gruvbox": {
-        "name": "Gruvbox",
-        "primary": "#fabd2f",
-        "background": "#282828",
-        "foreground": "#ebdbb2",
-        "accent": "#b8bb26",
-        "danger": "#fb4934",
-        "success": "#b8bb26",
-        "warning": "#fe8019",
-        "info": "#83a598",
-        "border-radius": "10px",
-        "cli": {
-            "primary": "\033[93m",
-            "success": "\033[92m",
-            "danger": "\033[91m",
-            "warning": "\033[93m",
-            "reset": "\033[0m"
-        }
-    },
-    "material": {
-        "name": "Material",
-        "primary": "#2196f3",
-        "background": "#263238",
-        "foreground": "#ececec",
-        "accent": "#ffeb3b",
-        "danger": "#e53935",
-        "success": "#43a047",
-        "warning": "#fbc02d",
-        "info": "#00bcd4",
-        "border-radius": "10px",
-        "cli": {
-            "primary": "\033[94m",
-            "success": "\033[92m",
-            "danger": "\033[91m",
-            "warning": "\033[93m",
-            "reset": "\033[0m"
-        }
-    },
-    "retro_terminal": {
-        "name": "Retro Terminal",
-        "primary": "#39FF14",
-        "background": "#1a1a1a",
-        "foreground": "#e0e0e0",
-        "accent": "#FFFF00",
-        "danger": "#FF3131",
-        "success": "#00FF41",
-        "warning": "#FFD700",
-        "info": "#00BFFF",
-        "border-radius": "0px",
-        "cli": {
-            "primary": "\033[92m",
-            "success": "\033[92m",
-            "danger": "\033[91m",
-            "warning": "\033[93m",
-            "reset": "\033[0m"
-        }
-    },
-    "matrix": {
-        "name": "Green Matrix",
-        "primary": "#00ff41",
-        "background": "#101010",
-        "foreground": "#bada55",
-        "accent": "#00ff41",
-        "danger": "#ff1133",
-        "success": "#21f300",
-        "warning": "#ffea00",
-        "info": "#43d9ad",
-        "border-radius": "5px",
-        "cli": {
-            "primary": "\033[92m",
-            "success": "\033[92m",
-            "danger": "\033[91m",
-            "warning": "\033[93m",
-            "reset": "\033[0m"
-        }
-    }
-}
+def list_jobs():
+    rows = db.query("SELECT id, name, schedule, action, enabled, last_run FROM scheduled_jobs")
+    for r in rows:
+        print(f"{r['id']}: {r['name']} [{r['schedule']}] -> {r['action']} enabled={r['enabled']}")
 
-def get_theme(theme_key="dark"):
-    return THEMES.get(theme_key, THEMES["dark"])
+def run_job(job_id):
+    job = db.query_one("SELECT * FROM scheduled_jobs WHERE id = ?", (job_id,))
+    if not job:
+        print("Job not found.")
+        return
 
-def list_theme_names():
-    return {k: v["name"] for k, v in THEMES.items()}
+    try:
+        logger.log("scheduler", f"Running job: {job['name']}")
+        output = execute_action(job['action'], json.loads(job['params']))
+        db.execute("INSERT INTO job_run_log (job_id, run_time, result, output) VALUES (?, datetime('now'), ?, ?)",
+                   (job_id, "OK", output))
+        db.execute("UPDATE scheduled_jobs SET last_run = datetime('now'), last_result = ? WHERE id = ?", ("OK", job_id))
+    except Exception as e:
+        err_msg = str(e)
+        db.execute("INSERT INTO job_run_log (job_id, run_time, result, output) VALUES (?, datetime('now'), ?, ?)",
+                   (job_id, "FAIL", err_msg))
+        db.execute("UPDATE scheduled_jobs SET last_run = datetime('now'), last_result = ? WHERE id = ?", ("FAIL", job_id))
+        notifier.notify_admin(f"Scheduled job '{job['name']}' failed: {err_msg}")
 
-def theme_css_vars(theme_key="dark"):
-    theme = get_theme(theme_key)
-    css = [f"--color-{k}: {v};" for k, v in theme.items() if k not in ["name", "cli"]]
-    return ":root {\n" + "\n".join([f"  {line}" for line in css]) + "\n}"
+def show_job_log(job_id):
+    logs = db.query("SELECT run_time, result, output FROM job_run_log WHERE job_id = ? ORDER BY run_time DESC LIMIT 10", (job_id,))
+    for log in logs:
+        print(f"{log['run_time']} - {log['result']}: {log['output']}")
 
-def cli_color(text, style="primary", theme_key="dark"):
-    return f"{THEMES.get(theme_key, THEMES['dark'])['cli'].get(style, '')}{text}{THEMES[theme_key]['cli']['reset']}"
+def add_job(name, action, schedule, params):
+    db.execute("INSERT INTO scheduled_jobs (name, action, schedule, params, enabled) VALUES (?, ?, ?, ?, 1)",
+               (name, action, schedule, params))
+    print("Job added.")
 
-def inject_theme_into_html(html, theme_key="dark"):
-    css = theme_css_vars(theme_key)
-    return html.replace("<!--THEME_VARS-->", f"<style>{css}</style>")
+def edit_job(job_id, enable):
+    db.execute("UPDATE scheduled_jobs SET enabled = ? WHERE id = ?", (1 if enable else 0, job_id))
+    print("Job updated.")
 
-def get_user_theme(username):
-    # Logic to load user-specific theme from DB, stub for now
-    # In production, query DB for user's theme
-    return "dark"
+def execute_action(action, params):
+    if action == "backup":
+        return "Backup completed"
+    elif action == "report":
+        return "Report generated"
+    elif action == "purge_logs":
+        return "Logs purged"
+    elif action == "sync_dns":
+        return "DNS synchronized"
+    elif action == "custom":
+        return "Custom action run"
+    return "Unknown action"
+
+def scheduler_loop():
+    jobs = db.query("SELECT * FROM scheduled_jobs WHERE enabled = 1")
+    now = datetime.now()
+    for job in jobs:
+        if is_due(job['schedule'], job['last_run'], now):
+            run_job(job['id'])

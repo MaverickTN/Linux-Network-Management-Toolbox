@@ -1,0 +1,32 @@
+{% extends "_layout.html" %}
+{% block content %}
+<h2>Blacklist Rules</h2>
+<form method="post" action="{{ url_for('blacklist.add') }}">
+  <select name="rule_type">
+    <option value="ip">IP</option>
+    <option value="vlan">VLAN</option>
+    <option value="time">Time</option>
+  </select>
+  <input name="target" placeholder="IP/VLAN ID/Time Range" required>
+  <input name="schedule" placeholder="e.g. 08:00-18:00 or threshold" required>
+  <input name="description" placeholder="Description">
+  <button type="submit">Add Rule</button>
+</form>
+<table>
+  <thead><tr><th>Type</th><th>Target</th><th>Schedule</th><th>Description</th><th>Enabled</th><th>Hits</th><th>Last Trigger</th><th>Actions</th></tr></thead>
+  <tbody>
+    {% for rule in rules %}
+    <tr>
+      <td>{{ rule[1] }}</td><td>{{ rule[2] }}</td><td>{{ rule[3] }}</td>
+      <td>{{ rule[4] }}</td><td>{{ 'Yes' if rule[5] else 'No' }}</td>
+      <td>{{ rule[6] }}</td><td>{{ rule[7] or '-' }}</td>
+      <td>
+        <a href="{{ url_for('blacklist.toggle', rule_id=rule[0]) }}">{{ 'Disable' if rule[5] else 'Enable' }}</a>
+        <a href="{{ url_for('blacklist.snooze', rule_id=rule[0]) }}">Snooze</a>
+        <a href="{{ url_for('blacklist.delete', rule_id=rule[0]) }}">Delete</a>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

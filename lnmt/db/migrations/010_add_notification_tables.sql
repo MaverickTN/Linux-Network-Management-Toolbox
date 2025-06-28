@@ -1,0 +1,1 @@
+-- SQL to create notification_rules and notification_log tables

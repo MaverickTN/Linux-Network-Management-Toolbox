@@ -1,0 +1,21 @@
+{% extends "_layout.html" %}
+{% block content %}
+<h2>Netplan Configs</h2>
+<a href="{{ url_for('netplan.netplan_add') }}">Add New Config</a>
+<table>
+    <thead><tr><th>Name</th><th>Last Modified</th><th>Actions</th></tr></thead>
+    <tbody>
+    {% for c in configs %}
+    <tr>
+        <td>{{ c.name }}</td>
+        <td>{{ c.last_modified }}</td>
+        <td>
+            <a href="{{ url_for('netplan.netplan_edit', config_id=c.id) }}">Edit</a>
+            <a href="{{ url_for('netplan.netplan_apply', config_id=c.id) }}">Stage</a>
+            <a href="{{ url_for('netplan.netplan_delete', config_id=c.id) }}">Delete</a>
+        </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+</table>
+{% endblock %}
