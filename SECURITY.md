@@ -6,7 +6,7 @@ We take security seriously and actively maintain security updates for the follow
 
 | Version | Supported          |
 | ------- | ------------------ |
-| 1.x.x   | :white_check_mark: |
+| 2.x.x   | :white_check_mark: |
 
 ## Security Considerations
 
