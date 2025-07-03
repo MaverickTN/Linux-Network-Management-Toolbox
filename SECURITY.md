@@ -137,7 +137,7 @@ This project aims to comply with:
 ## Security Contact
 
 For security-related questions or concerns:
-- **Security Email**: security@[your-domain].com
+- **Security Email**: maverick38344@gmail.com
 - **PGP Key**: [Link to public key]
 - **Security Advisory**: GitHub Security Advisories
 - **Response Time**: Within 48 hours for initial response
