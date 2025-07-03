@@ -1,0 +1,509 @@
+/* web/static/css/dashboard.css */
+
+/* Custom Variables */
+:root {
+    --primary-color: #4e73df;
+    --secondary-color: #858796;
+    --success-color: #1cc88a;
+    --info-color: #36b9cc;
+    --warning-color: #f6c23e;
+    --danger-color: #e74a3b;
+    --light-color: #f8f9fc;
+    --dark-color: #5a5c69;
+    --sidebar-width: 14rem;
+}
+
+/* Body and Layout */
+body {
+    font-family: 'Nunito', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+    background-color: var(--light-color);
+}
+
+/* Navigation Enhancements */
+.navbar-brand {
+    font-weight: bold;
+    font-size: 1.2rem;
+}
+
+.navbar-nav .nav-link {
+    padding: 0.75rem 1rem;
+    border-radius: 0.35rem;
+    margin: 0 0.25rem;
+    transition: all 0.3s ease;
+}
+
+.navbar-nav .nav-link:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+    transform: translateY(-1px);
+}
+
+.navbar-nav .nav-link.active {
+    background-color: rgba(255, 255, 255, 0.2);
+    font-weight: bold;
+}
+
+/* Card Enhancements */
+.card {
+    border: none;
+    border-radius: 0.75rem;
+    box-shadow: 0 0.15rem 1.75rem 0 rgba(58, 59, 69, 0.15);
+    transition: all 0.3s ease;
+}
+
+.card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 0.25rem 2rem 0 rgba(58, 59, 69, 0.25);
+}
+
+.card-header {
+    background-color: #f8f9fc;
+    border-bottom: 1px solid #e3e6f0;
+    border-radius: 0.75rem 0.75rem 0 0;
+    padding: 1rem 1.5rem;
+}
+
+.card-header h6 {
+    margin: 0;
+    font-weight: bold;
+    color: var(--primary-color);
+}
+
+/* Border Left Cards */
+.border-left-primary {
+    border-left: 0.25rem solid var(--primary-color) !important;
+}
+
+.border-left-success {
+    border-left: 0.25rem solid var(--success-color) !important;
+}
+
+.border-left-info {
+    border-left: 0.25rem solid var(--info-color) !important;
+}
+
+.border-left-warning {
+    border-left: 0.25rem solid var(--warning-color) !important;
+}
+
+.border-left-danger {
+    border-left: 0.25rem solid var(--danger-color) !important;
+}
+
+/* Text Utilities */
+.text-gray-800 {
+    color: #5a5c69 !important;
+}
+
+.text-gray-900 {
+    color: #3a3b45 !important;
+}
+
+.text-gray-300 {
+    color: #dddfeb !important;
+}
+
+/* Font Weight */
+.font-weight-bold {
+    font-weight: 700 !important;
+}
+
+/* Text Size */
+.text-xs {
+    font-size: 0.7rem;
+}
+
+/* Progress Bars */
+.progress {
+    height: 0.5rem;
+    border-radius: 0.35rem;
+    background-color: #eaecf4;
+}
+
+.progress-bar {
+    border-radius: 0.35rem;
+}
+
+/* Buttons */
+.btn {
+    border-radius: 0.35rem;
+    font-weight: 600;
+    transition: all 0.3s ease;
+}
+
+.btn:hover {
+    transform: translateY(-1px);
+}
+
+.btn-primary {
+    background-color: var(--primary-color);
+    border-color: var(--primary-color);
+}
+
+.btn-primary:hover {
+    background-color: #2653d4;
+    border-color: #2653d4;
+}
+
+/* Tables */
+.table {
+    color: #858796;
+}
+
+.table th {
+    border-top: none;
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.8rem;
+    letter-spacing: 0.02rem;
+    color: #6e707e;
+}
+
+.table td {
+    vertical-align: middle;
+}
+
+/* Charts */
+.chart-area {
+    position: relative;
+    height: 20rem;
+    width: 100%;
+}
+
+.chart-pie {
+    position: relative;
+    height: 15rem;
+    width: 100%;
+}
+
+/* Status Badges */
+.status-badge {
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.35rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05rem;
+}
+
+.status-online {
+    background-color: #d1eddd;
+    color: #0f5132;
+}
+
+.status-offline {
+    background-color: #f8d7da;
+    color: #721c24;
+}
+
+.status-warning {
+    background-color: #fff3cd;
+    color: #856404;
+}
+
+/* Alert Enhancements */
+.alert {
+    border: none;
+    border-radius: 0.5rem;
+    font-weight: 500;
+}
+
+.alert .alert-heading {
+    font-weight: 700;
+}
+
+/* Loading States */
+.loading {
+    position: relative;
+    color: transparent !important;
+}
+
+.loading::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 1rem;
+    height: 1rem;
+    margin: -0.5rem 0 0 -0.5rem;
+    border: 2px solid #f3f3f3;
+    border-top: 2px solid var(--primary-color);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Network Topology */
+.network-node {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-weight: bold;
+    font-size: 0.8rem;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    position: absolute;
+}
+
+.network-node:hover {
+    transform: scale(1.1);
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.3);
+}
+
+.node-router {
+    background-color: var(--primary-color);
+}
+
+.node-switch {
+    background-color: var(--success-color);
+}
+
+.node-server {
+    background-color: var(--warning-color);
+}
+
+.node-workstation {
+    background-color: var(--info-color);
+}
+
+.network-connection {
+    stroke: #ccc;
+    stroke-width: 2;
+    stroke-dasharray: 5,5;
+    animation: dash 1s linear infinite;
+}
+
+@keyframes dash {
+    to {
+        stroke-dashoffset: -10;
+    }
+}
+
+/* Device Status Icons */
+.device-status {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    display: inline-block;
+    margin-right: 0.5rem;
+}
+
+.device-status.online {
+    background-color: var(--success-color);
+    box-shadow: 0 0 6px rgba(28, 200, 138, 0.5);
+}
+
+.device-status.offline {
+    background-color: var(--danger-color);
+    box-shadow: 0 0 6px rgba(231, 74, 59, 0.5);
+}
+
+.device-status.unknown {
+    background-color: var(--secondary-color);
+    box-shadow: 0 0 6px rgba(133, 135, 150, 0.5);
+}
+
+/* DataTables Customization */
+.dataTables_wrapper .dataTables_length,
+.dataTables_wrapper .dataTables_filter,
+.dataTables_wrapper .dataTables_info,
+.dataTables_wrapper .dataTables_paginate {
+    margin-bottom: 1rem;
+}
+
+.dataTables_wrapper .dataTables_filter input {
+    border-radius: 0.35rem;
+    border: 1px solid #d1d3e2;
+    padding: 0.375rem 0.75rem;
+}
+
+.dataTables_wrapper .dataTables_length select {
+    border-radius: 0.35rem;
+    border: 1px solid #d1d3e2;
+    padding: 0.375rem 0.75rem;
+}
+
+/* Modal Enhancements */
+.modal-content {
+    border: none;
+    border-radius: 0.5rem;
+    box-shadow: 0 1rem 3rem rgba(0, 0, 0, 0.175);
+}
+
+.modal-header {
+    border-bottom: 1px solid #e3e6f0;
+    background-color: var(--light-color);
+}
+
+.modal-footer {
+    border-top: 1px solid #e3e6f0;
+    background-color: var(--light-color);
+}
+
+/* Form Enhancements */
+.form-control {
+    border-radius: 0.35rem;
+    border: 1px solid #d1d3e2;
+    transition: all 0.3s ease;
+}
+
+.form-control:focus {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 0.2rem rgba(78, 115, 223, 0.25);
+}
+
+.form-label {
+    font-weight: 600;
+    color: var(--dark-color);
+    margin-bottom: 0.5rem;
+}
+
+/* Dropdown Enhancements */
+.dropdown-menu {
+    border: none;
+    border-radius: 0.5rem;
+    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+    border: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.dropdown-item {
+    padding: 0.5rem 1rem;
+    border-radius: 0.35rem;
+    margin: 0.125rem;
+    transition: all 0.3s ease;
+}
+
+.dropdown-item:hover {
+    background-color: var(--primary-color);
+    color: white;
+}
+
+/* Sidebar for mobile (if needed) */
+@media (max-width: 768px) {
+    .navbar-nav {
+        padding: 1rem 0;
+    }
+    
+    .navbar-nav .nav-link {
+        margin: 0.25rem 0;
+    }
+    
+    .card {
+        margin-bottom: 1rem;
+    }
+    
+    .chart-area,
+    .chart-pie {
+        height: 15rem;
+    }
+}
+
+/* Animation for page transitions */
+.page-content {
+    animation: fadeInUp 0.5s ease-out;
+}
+
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Utility Classes */
+.shadow-sm {
+    box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075) !important;
+}
+
+.shadow {
+    box-shadow: 0 0.15rem 1.75rem 0 rgba(58, 59, 69, 0.15) !important;
+}
+
+.shadow-lg {
+    box-shadow: 0 1rem 3rem rgba(0, 0, 0, 0.175) !important;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+    width: 0.5rem;
+}
+
+::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 0.25rem;
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--secondary-color);
+    border-radius: 0.25rem;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--dark-color);
+}
+
+/* Alert List */
+.alert-item {
+    border-left: 4px solid;
+    padding: 0.75rem 1rem;
+    margin-bottom: 0.5rem;
+    border-radius: 0.35rem;
+    background-color: white;
+    transition: all 0.3s ease;
+}
+
+.alert-item:hover {
+    transform: translateX(5px);
+    box-shadow: 0 0.25rem 0.5rem rgba(0, 0, 0, 0.1);
+}
+
+.alert-item.critical {
+    border-left-color: var(--danger-color);
+}
+
+.alert-item.warning {
+    border-left-color: var(--warning-color);
+}
+
+.alert-item.info {
+    border-left-color: var(--info-color);
+}
+
+.alert-item.success {
+    border-left-color: var(--success-color);
+}
+
+/* Real-time indicators */
+.real-time-indicator {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    background-color: var(--success-color);
+    border-radius: 50%;
+    animation: pulse 2s infinite;
+    margin-left: 0.5rem;
+}
+
+@keyframes pulse {
+    0% {
+        box-shadow: 0 0 0 0 rgba(28, 200, 138, 0.7);
+    }
+    70% {
+        box-shadow: 0 0 0 10px rgba(28, 200, 138, 0);
+    }
+    100% {
+        box-shadow: 0 0 0 0 rgba(28, 200, 138, 0);
+    }
+}

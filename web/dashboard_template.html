@@ -1,0 +1,229 @@
+<!-- web/templates/dashboard.html -->
+{% extends "base.html" %}
+
+{% block title %}LNMT Dashboard{% endblock %}
+
+{% block content %}
+<!-- Dashboard Header -->
+<div class="row mb-4">
+    <div class="col-12">
+        <h2><i class="fas fa-tachometer-alt me-2"></i>Network Dashboard</h2>
+        <p class="text-muted">Real-time network monitoring and management</p>
+    </div>
+</div>
+
+<!-- Summary Cards -->
+<div class="row mb-4">
+    <div class="col-xl-3 col-md-6 mb-4">
+        <div class="card border-left-primary shadow h-100 py-2">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">Total Devices</div>
+                        <div class="h5 mb-0 font-weight-bold text-gray-800" id="totalDevices">--</div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="fas fa-desktop fa-2x text-gray-300"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-xl-3 col-md-6 mb-4">
+        <div class="card border-left-success shadow h-100 py-2">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-success text-uppercase mb-1">Online Devices</div>
+                        <div class="h5 mb-0 font-weight-bold text-gray-800" id="onlineDevices">--</div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="fas fa-check-circle fa-2x text-gray-300"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-xl-3 col-md-6 mb-4">
+        <div class="card border-left-warning shadow h-100 py-2">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">Active Alerts</div>
+                        <div class="h5 mb-0 font-weight-bold text-gray-800" id="activeAlerts">--</div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="fas fa-exclamation-triangle fa-2x text-gray-300"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-xl-3 col-md-6 mb-4">
+        <div class="card border-left-info shadow h-100 py-2">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-info text-uppercase mb-1">VLANs</div>
+                        <div class="h5 mb-0 font-weight-bold text-gray-800" id="totalVlans">--</div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="fas fa-project-diagram fa-2x text-gray-300"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Charts and Recent Activity -->
+<div class="row">
+    <!-- Bandwidth Chart -->
+    <div class="col-xl-8 col-lg-7">
+        <div class="card shadow mb-4">
+            <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
+                <h6 class="m-0 font-weight-bold text-primary">Bandwidth Usage (24h)</h6>
+                <div class="dropdown no-arrow">
+                    <button class="btn btn-link btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                        <i class="fas fa-ellipsis-v fa-sm fa-fw text-gray-400"></i>
+                    </button>
+                    <div class="dropdown-menu dropdown-menu-end shadow">
+                        <a class="dropdown-item" href="#" onclick="refreshBandwidthChart()">Refresh</a>
+                        <a class="dropdown-item" href="#" onclick="exportChart()">Export</a>
+                    </div>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="chart-area">
+                    <canvas id="bandwidthChart" width="400" height="200"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Device Status Pie Chart -->
+    <div class="col-xl-4 col-lg-5">
+        <div class="card shadow mb-4">
+            <div class="card-header py-3">
+                <h6 class="m-0 font-weight-bold text-primary">Device Status</h6>
+            </div>
+            <div class="card-body">
+                <div class="chart-pie pt-4 pb-2">
+                    <canvas id="deviceStatusChart" width="400" height="300"></canvas>
+                </div>
+                <div class="mt-4 text-center small">
+                    <span class="mr-2">
+                        <i class="fas fa-circle text-success"></i> Online
+                    </span>
+                    <span class="mr-2">
+                        <i class="fas fa-circle text-danger"></i> Offline
+                    </span>
+                    <span class="mr-2">
+                        <i class="fas fa-circle text-warning"></i> Unknown
+                    </span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Recent Alerts and Device Status -->
+<div class="row">
+    <!-- Recent Alerts -->
+    <div class="col-lg-6 mb-4">
+        <div class="card shadow">
+            <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
+                <h6 class="m-0 font-weight-bold text-primary">Recent Alerts</h6>
+                <a href="/alerts" class="btn btn-primary btn-sm">View All</a>
+            </div>
+            <div class="card-body">
+                <div id="recentAlerts" class="list-group list-group-flush">
+                    <div class="text-center text-muted">Loading alerts...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- System Health -->
+    <div class="col-lg-6 mb-4">
+        <div class="card shadow">
+            <div class="card-header py-3">
+                <h6 class="m-0 font-weight-bold text-primary">System Health</h6>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-6">
+                        <div class="mb-3">
+                            <div class="small text-muted">CPU Usage</div>
+                            <div class="progress mb-2">
+                                <div class="progress-bar bg-info" role="progressbar" style="width: 45%" id="cpuUsage"></div>
+                            </div>
+                            <span class="small text-muted">45%</span>
+                        </div>
+                        <div class="mb-3">
+                            <div class="small text-muted">Memory Usage</div>
+                            <div class="progress mb-2">
+                                <div class="progress-bar bg-warning" role="progressbar" style="width: 62%" id="memoryUsage"></div>
+                            </div>
+                            <span class="small text-muted">62%</span>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="mb-3">
+                            <div class="small text-muted">Disk Usage</div>
+                            <div class="progress mb-2">
+                                <div class="progress-bar bg-success" role="progressbar" style="width: 28%" id="diskUsage"></div>
+                            </div>
+                            <span class="small text-muted">28%</span>
+                        </div>
+                        <div class="mb-3">
+                            <div class="small text-muted">Network Load</div>
+                            <div class="progress mb-2">
+                                <div class="progress-bar bg-primary" role="progressbar" style="width: 73%" id="networkLoad"></div>
+                            </div>
+                            <span class="small text-muted">73%</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="text-center mt-3">
+                    <small class="text-muted">Last updated: <span id="lastUpdated">--</span></small>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Network Map Preview -->
+<div class="row">
+    <div class="col-12">
+        <div class="card shadow mb-4">
+            <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
+                <h6 class="m-0 font-weight-bold text-primary">Network Topology</h6>
+                <button class="btn btn-primary btn-sm" onclick="showNetworkMap()">Full View</button>
+            </div>
+            <div class="card-body">
+                <div id="networkPreview" class="text-center" style="height: 300px; border: 2px dashed #ddd; display: flex; align-items: center; justify-content: center;">
+                    <div>
+                        <i class="fas fa-network-wired fa-3x text-muted mb-3"></i>
+                        <p class="text-muted">Network topology visualization</p>
+                        <button class="btn btn-outline-primary" onclick="loadNetworkMap()">Load Network Map</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/dashboard.js"></script>
+<script>
+    // Initialize dashboard on page load
+    document.addEventListener('DOMContentLoaded', function() {
+        initializeDashboard();
+    });
+</script>
+{% endblock %}

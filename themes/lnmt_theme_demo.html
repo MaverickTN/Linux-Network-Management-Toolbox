@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LNMT Theme System Demo</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            transition: all 0.3s ease;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+            padding: 1rem 0;
+            border-bottom: 2px solid;
+        }
+
+        .theme-controls {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+        }
+
+        .theme-selector {
+            padding: 8px 12px;
+            border: 2px solid;
+            border-radius: 6px;
+            background: transparent;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .theme-info {
+            background: rgba(0,0,0,0.1);
+            padding: 1rem;
+            border-radius: 8px;
+            margin-bottom: 2rem;
+            border-left: 4px solid;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .card {
+            padding: 1.5rem;
+            border-radius: 8px;
+            border: 2px solid;
+            transition: all 0.3s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+
+        .card h3 {
+            margin-bottom: 1rem;
+            font-size: 1.2rem;
+        }
+
+        .card p {
+            margin-bottom: 0.5rem;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: 2px solid;
+            border-radius: 6px;
+            background: transparent;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.3s ease;
+            margin: 0.5rem 0.5rem 0.5rem 0;
+        }
+
+        .btn:hover {
+            transform: scale(1.05);
+        }
+
+        .input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid;
+            border-radius: 6px;
+            background: transparent;
+            margin: 0.5rem 0;
+            transition: all 0.3s ease;
+        }
+
+        .alert {
+            padding: 1rem;
+            border-radius: 6px;
+            border: 2px solid;
+            margin: 1rem 0;
+        }
+
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin: 2rem 0;
+        }
+
+        .status-item {
+            text-align: center;
+            padding: 1rem;
+            border-radius: 8px;
+            border: 2px solid;
+        }
+
+        .cli-demo {
+            background: #1a1a1a;
+            color: #e0e0e0;
+            padding: 1.5rem;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            margin: 2rem 0;
+            overflow-x: auto;
+        }
+
+        .theme-preview {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1rem;
+            margin: 2rem 0;
+        }
+
+        .theme-card {
+            padding: 1rem;
+            border-radius: 8px;
+            border: 2px solid;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-align: center;
+        }
+
+        .theme-card:hover {
+            transform: scale(1.02);
+        }
+
+        .color-palette {
+            display: flex;
+            justify-content: center;
+            gap: 0.5rem;
+            margin: 1rem 0;
+        }
+
+        .color-swatch {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            border: 2px solid #fff;
+        }
+
+        /* Default theme (dark) */
+        body {
+            background: #23272e;
+            color: #e0e0e0;
+        }
+
+        .header {
+            border-color: #3498db;
+        }
+
+        .theme-selector {
+            border-color: #3498db;
+            color: #e0e0e0;
+            background: #23272e;
+        }
+
+        .theme-info {
+            border-color: #f39c12;
+            background: rgba(243, 156, 18, 0.1);
+        }
+
+        .card {
+            background: rgba(52, 152, 219, 0.1);
+            border-color: #3498db;
+        }
+
+        .btn {
+            border-color: #3498db;
+            color: #3498db;
+        }
+
+        .btn:hover {
+            background: #3498db;
+            color: #23272e;
+        }
+
+        .input {
+            border-color: #3498db;
+            color: #e0e0e0;
+            background: rgba(52, 152, 219, 0.1);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1>🌐 LNMT Theme System Demo</h1>
+            <div class="theme-controls">
+                <label for="theme-selector">Theme:</label>
+                <select id="theme-selector" class="theme-selector">
+                    <option value="dark">Dark</option>
+                    <option value="light">Light</option>
+                    <option value="black">Blackout</option>
+                    <option value="solarized">Solarized</option>
+                    <option value="oceanic">Oceanic</option>
+                    <option value="nord">Nord</option>
+                    <option value="gruvbox">Gruvbox</option>
+                    <option value="material">Material</option>
+                    <option value="retro_terminal">Retro Terminal</option>
+                    <option value="matrix">Matrix</option>
+                </select>
+                <button class="btn" onclick="toggleTheme()">Random Theme</button>
+            </div>
+        </header>
+
+        <div class="theme-info">
+            <h2>📋 Current Theme: <span id="current-theme-name">Dark</span></h2>
+            <p>This demo showcases the LNMT modular theme system with 10 beautiful themes for both web and CLI interfaces.</p>
+        </div>
+
+        <div class="grid">
+            <div class="card">
+                <h3 style="color: var(--primary, #3498db)">🔧 System Status</h3>
+                <p style="color: var(--success, #43a047)">✅ All systems operational</p>
+                <p style="color: var(--info, #007bff)">ℹ️ Uptime: 15 days, 3 hours</p>
+                <button class="btn">Refresh Status</button>
+            </div>
+            
+            <div class="card">
+                <h3 style="color: var(--primary, #3498db)">📊 Network Traffic</h3>
+                <p style="color: var(--warning, #ff9800)">⚠️ High bandwidth usage detected</p>
+                <p style="color: var(--info, #007bff)">ℹ️ Current: 85% of limit</p>
+                <button class="btn">View Details</button>
+            </div>
+            
+            <div class="card">
+                <h3 style="color: var(--primary, #3498db)">🔒 Security</h3>
+                <p style="color: var(--danger, #e74c3c)">❌ 3 failed login attempts</p>
+                <p style="color: var(--success, #43a047)">✅ Firewall active</p>
+                <button class="btn">Investigate</button>
+            </div>
+        </div>
+
+        <div class="status-grid">
+            <div class="status-item" style="border-color: var(--success, #43a047)">
+                <h4 style="color: var(--success, #43a047)">CPU Usage</h4>
+                <p>34%</p>
+            </div>
+            <div class="status-item" style="border-color: var(--warning, #ff9800)">
+                <h4 style="color: var(--warning, #ff9800)">Memory</h4>
+                <p>72%</p>
+            </div>
+            <div class="status-item" style="border-color: var(--info, #007bff)">
+                <h4 style="color: var(--info, #007bff)">Storage</h4>
+                <p>45%</p>
+            </div>
+            <div class="status-item" style="border-color: var(--accent, #f39c12)">
+                <h4 style="color: var(--accent, #f39c12)">Network</h4>
+                <p>Active</p>
+            </div>
+        </div>
+
+        <div class="card">
+            <h3 style="color: var(--primary, #3498db)">📝 Quick Actions</h3>
+            <input type="text" class="input" placeholder="Enter command...">
+            <div>
+                <button class="btn">Execute</button>
+                <button class="btn">Clear</button>
+                <button class="btn">History</button>
+            </div>
+        </div>
+
+        <div class="alert" style="border-color: var(--info, #007bff); background: rgba(0, 123, 255, 0.1);">
+            <strong style="color: var(--info, #007bff)">Info:</strong> Theme system successfully loaded with full CSS custom properties support.
+        </div>
+
+        <div class="cli-demo">
+            <div style="color: #00ff41;">$ lnmt_theme_load list</div>
+            <div style="color: #ffffff;">Available LNMT themes:</div>
+            <div style="color: #00ff41;">  • dark (current)</div>
+            <div style="color: #ffffff;">  • light</div>
+            <div style="color: #ffffff;">  • black</div>
+            <div style="color: #ffffff;">  • solarized</div>
+            <div style="color: #ffffff;">  • oceanic</div>
+            <div style="color: #ffffff;">  • nord</div>
+            <div style="color: #ffffff;">  • gruvbox</div>
+            <div style="color: #ffffff;">  • material</div>
+            <div style="color: #ffffff;">  • retro_terminal</div>
+            <div style="color: #ffffff;">  • matrix</div>
+            <br>
+            <div style="color: #00ff41;">$ lnmt_theme_load load solarized</div>
+            <div style="color: #92f441;">✅ Theme 'Solarized' loaded successfully</div>
+            <br>
+            <div style="color: #00ff41;">$ lnmt_print_success "Network scan completed"</div>
+            <div style="color: #92f441;">✅ Network scan completed</div>
+        </div>
+
+        <h2 style="color: var(--primary, #3498db)">🎨 Theme Gallery</h2>
+        <div class="theme-preview" id="theme-gallery">
+            <!-- Theme cards will be populated by JavaScript -->
+        </div>
+    </div>
+
+    <script>
+        // Theme definitions (simplified for demo)
+        const themes = {
+            dark: {
+                name: "Dark",
+                colors: {
+                    background: "#23272e",
+                    foreground: "#e0e0e0",
+                    primary: "#3498db",
+                    accent: "#f39c12",
+                    success: "#43a047",
+                    danger: "#e74c3c",
+                    warning: "#ff9800",
+                    info: "#007bff"
+                }
+            },
+            light: {
+                name: "Light",
+                colors: {
+                    background: "#f5f6fa",
+                    foreground: "#222426",
+                    primary: "#007bff",
+                    accent: "#39b385",
+                    success: "#388e3c",
+                    danger: "#c0392b",
+                    warning: "#ffb300",
+                    info: "#1565c0"
+                }
+            },
+            black: {
+                name: "Blackout",
+                colors: {
+                    background: "#000000",
+                    foreground: "#c7c7c7",
+                    primary: "#18ffff",
+                    accent: "#00bcd4",
+                    success: "#00e676",
+                    danger: "#ff1744",
+                    warning: "#ff9100",
+                    info: "#00b0ff"
+                }
+            },
+            solarized: {
+                name: "Solarized",
+                colors: {
+                    background: "#002b36",
+                    foreground: "#93a1a1",
+                    primary: "#268bd2",
+                    accent: "#b58900",
+                    success: "#859900",
+                    danger: "#dc322f",
+                    warning: "#cb4b16",
+                    info: "#839496"
+                }
+            },
+            oceanic: {
+                name: "Oceanic",
+                colors: {
+                    background: "#22313f",
+                    foreground: "#b0bec5",
+                    primary: "#29b6f6",
+                    accent: "#ffd54f",
+                    success: "#43a047",
+                    danger: "#e53935",
+                    warning: "#ffa726",
+                    info: "#0288d1"
+                }
+            },
+            nord: {
+                name: "Nord",
+                colors: {
+                    background: "#2E3440",
+                    foreground: "#D8DEE9",
+                    primary: "#81A1C1",
+                    accent: "#A3BE8C",
+                    success: "#A3BE8C",
+                    danger: "#BF616A",
+                    warning: "#EBCB8B",
+                    info: "#5E81AC"
+                }
+            },
+            gruvbox: {
+                name: "Gruvbox",
+                colors: {
+                    background: "#282828",
+                    foreground: "#ebdbb2",
+                    primary: "#fabd2f",
+                    accent: "#b8bb26",
+                    success: "#b8bb26",
+                    danger: "#fb4934",
+                    warning: "#fe8019",
+                    info: "#83a598"
+                }
+            },
+            material: {
+                name: "Material",
+                colors: {
+                    background: "#263238",
+                    foreground: "#ececec",
+                    primary: "#2196f3",
+                    accent: "#ffeb3b",
+                    success: "#43a047",
+                    danger: "#e53935",
+                    warning: "#fbc02d",
+                    info: "#00bcd4"
+                }
+            },
+            retro_terminal: {
+                name: "Retro Terminal",
+                colors: {
+                    background: "#1a1a1a",
+                    foreground: "#e0e0e0",
+                    primary: "#39FF14",
+                    accent: "#FFFF00",
+                    success: "#00FF41",
+                    danger: "#FF3131",
+                    warning: "#FFD700",
+                    info: "#00BFFF"
+                }
+            },
+            matrix: {
+                name: "Green Matrix",
+                colors: {
+                    background: "#101010",
+                    foreground: "#bada55",
+                    primary: "#00ff41",
+                    accent: "#00ff41",
+                    success: "#21f300",
+                    danger: "#ff1133",
+                    warning: "#ffea00",
+                    info: "#43d9ad"
+                }
+            }
+        };
+
+        let currentTheme = 'dark';
+
+        function applyTheme(themeId) {
+            const theme = themes[themeId];
+            if (!theme) return;
+
+            const root = document.documentElement;
+            const colors = theme.colors;
+
+            // Apply CSS custom properties
+            root.style.setProperty('--background', colors.background);
+            root.style.setProperty('--foreground', colors.foreground);
+            root.style.setProperty('--primary', colors.primary);
+            root.style.setProperty('--accent', colors.accent);
+            root.style.setProperty('--success', colors.success);
+            root.style.setProperty('--danger', colors.danger);
+            root.style.setProperty('--warning', colors.warning);
+            root.style.setProperty('--info', colors.info);
+
+            // Apply to body
+            document.body.style.background = colors.background;
+            document.body.style.color = colors.foreground;
+
+            // Update theme info
+            document.getElementById('current-theme-name').textContent = theme.name;
+            document.getElementById('theme-selector').value = themeId;
+
+            currentTheme = themeId;
+
+            // Animate transition
+            document.body.style.transition = 'all 0.5s ease';
+            setTimeout(() => {
+                document.body.style.transition = 'all 0.3s ease';
+            }, 500);
+        }
+
+        function toggleTheme() {
+            const themeIds = Object.keys(themes);
+            const randomId = themeIds[Math.floor(Math.random() * themeIds.length)];
+            applyTheme(randomId);
+        }
+
+        function createThemeGallery() {
+            const gallery = document.getElementById('theme-gallery');
+            
+            Object.entries(themes).forEach(([id, theme]) => {
+                const card = document.createElement('div');
+                card.className = 'theme-card';
+                card.style.background = theme.colors.background;
+                card.style.color = theme.colors.foreground;
+                card.style.borderColor = theme.colors.primary;
+                card.onclick = () => applyTheme(id);
+
+                const palette = document.createElement('div');
+                palette.className = 'color-palette';
+                
+                ['primary', 'accent', 'success', 'danger', 'warning'].forEach(colorKey => {
+                    const swatch = document.createElement('div');
+                    swatch.className = 'color-swatch';
+                    swatch.style.background = theme.colors[colorKey];
+                    palette.appendChild(swatch);
+                });
+
+                card.innerHTML = `
+                    <h4 style="color: ${theme.colors.primary}">${theme.name}</h4>
+                    <p style="font-size: 0.9rem; opacity: 0.8;">Click to apply</p>
+                `;
+                card.appendChild(palette);
+                
+                gallery.appendChild(card);
+            });
+        }
+
+        // Event listeners
+        document.getElementById('theme-selector').addEventListener('change', (e) => {
+            applyTheme(e.target.value);
+        });
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            createThemeGallery();
+            applyTheme('dark');
+        });
+
+        // Add some interactive effects
+        document.addEventListener('click', (e) => {
+            if (e.target.classList.contains('btn')) {
+                e.target.style.transform = 'scale(0.95)';
+                setTimeout(() => {
+                    e.target.style.transform = 'scale(1.05)';
+                    setTimeout(() => {
+                        e.target.style.transform = '';
+                    }, 100);
+                }, 100);
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,66 @@
+[Unit]
+Description=LNMT - Local Network Management Tool
+Documentation=https://github.com/yourusername/lnmt
+After=network.target postgresql.service redis.service
+Wants=postgresql.service redis.service
+
+[Service]
+Type=notify
+User=lnmt
+Group=lnmt
+WorkingDirectory=/opt/lnmt
+Environment="PATH=/opt/lnmt/venv/bin:/usr/local/bin:/usr/bin:/bin"
+Environment="PYTHONPATH=/opt/lnmt"
+Environment="LNMT_CONFIG=/etc/lnmt/config.yml"
+EnvironmentFile=-/etc/lnmt/lnmt.env
+
+# Service startup
+ExecStartPre=/opt/lnmt/venv/bin/python -m lnmt.utils.preflight_check
+ExecStart=/opt/lnmt/venv/bin/gunicorn \
+    --workers ${WORKERS:-4} \
+    --worker-class uvicorn.workers.UvicornWorker \
+    --bind ${BIND_ADDRESS:-0.0.0.0}:${PORT:-8080} \
+    --timeout ${WORKER_TIMEOUT:-30} \
+    --access-logfile - \
+    --error-logfile - \
+    --log-level ${LOG_LEVEL:-info} \
+    --pid /run/lnmt/lnmt.pid \
+    lnmt.web.lnmt_web_app:app
+
+ExecReload=/bin/kill -s HUP $MAINPID
+ExecStop=/bin/kill -s TERM $MAINPID
+
+# Process management
+Restart=always
+RestartSec=10
+StartLimitInterval=10
+StartLimitBurst=3
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/lnmt /var/log/lnmt /var/backups/lnmt /run/lnmt
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictRealtime=true
+RestrictNamespaces=true
+RestrictSUIDSGID=true
+RemoveIPC=true
+PrivateMounts=true
+
+# Resource limits
+LimitNOFILE=65536
+LimitNPROC=4096
+MemoryLimit=2G
+CPUQuota=200%
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=lnmt
+
+[Install]
+WantedBy=multi-user.target

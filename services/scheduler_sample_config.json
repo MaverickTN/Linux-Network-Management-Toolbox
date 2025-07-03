@@ -1,0 +1,524 @@
+{
+  "scheduler": {
+    "name": "LNMT Production Scheduler",
+    "version": "1.0.0",
+    "max_workers": 8,
+    "default_timeout": 3600,
+    "default_retries": 3,
+    "history_retention_days": 90,
+    "log_level": "INFO"
+  },
+  "jobs": [
+    {
+      "id": "network_status_poll",
+      "name": "Network Device Status Polling",
+      "description": "Poll all network devices for status and connectivity",
+      "module": "lnmt.polling",
+      "function": "poll_network_status",
+      "schedule": "*/2 * * * *",
+      "priority": 3,
+      "max_retries": 2,
+      "retry_delay": 30,
+      "timeout": 300,
+      "dependencies": [],
+      "enabled": true,
+      "args": [],
+      "kwargs": {
+        "timeout": 30,
+        "parallel": true,
+        "protocols": ["ping", "snmp"]
+      },
+      "tags": ["monitoring", "network", "critical"]
+    },
+    {
+      "id": "system_metrics_collection",
+      "name": "System Metrics Collection",
+      "description": "Collect CPU, memory, disk, and network metrics from monitored systems",
+      "module": "lnmt.metrics",
+      "function": "collect_system_metrics",
+      "schedule": "*/5 * * * *",
+      "priority": 3,
+      "max_retries": 3,
+      "retry_delay": 60,
+      "timeout": 600,
+      "dependencies": [],
+      "enabled": true,
+      "args": [],
+      "kwargs": {
+        "metrics": ["cpu", "memory", "disk", "network"],
+        "store_history": true,
+        "compress_data": true
+      },
+      "tags": ["monitoring", "metrics", "performance"]
+    },
+    {
+      "id": "security_log_analysis",
+      "name": "Security Log Analysis",
+      "description": "Analyze security logs for threats and anomalies",
+      "module": "lnmt.security",
+      "function": "analyze_security_logs",
+      "schedule": "*/10 * * * *",
+      "priority": 2,
+      "max_retries": 3,
+      "retry_delay": 120,
+      "timeout": 900,
+      "dependencies": [],
+      "enabled": true,
+      "args": [],
+      "kwargs": {
+        "lookback_minutes": 10,
+        "threat_detection": true,
+        "anomaly_detection": true,
+        "alert_threshold": "medium"
+      },
+      "tags": ["security", "logs", "analysis"]
+    },
+    {
+      "id": "configuration_backup",
+      "name": "Network Configuration Backup",
+      "description": "Backup configurations from all network devices",
+      "module": "lnmt.backup",
+      "function": "backup_device_configurations",
+      "schedule": "0 2 * * *",
+      "priority": 2,
+      "max_retries": 3,
+      "retry_delay": 300,
+      "timeout": 3600,
+      "dependencies": ["network_status_poll"],
+      "enabled": true,
+      "args": [],
+      "kwargs": {
+        "backup_path": "/opt/lnmt/backups/configs",
+        "compression": true,
+        "retention_days": 30,
+        "verify_backup": true
+      },
+      "tags": ["backup", "configuration", "network"]
+    },
+    {
+      "id": "monitoring_data_backup",
+      "name": "Monitoring Data Backup",
+      "description": "Backup monitoring database and historical data",
+      "module": "lnmt.backup",
+      "function": "backup_monitoring_database",
+      "schedule": "30 2 * * *",
+      "priority": 2,
+      "max_retries": 2,
+      "retry_delay": 600,
+      "timeout": 7200,
+      "dependencies": ["system_metrics_collection"],
+      "enabled": true,
+      "args": [],
+      "kwargs": {
+        "backup_path": "/opt/lnmt/backups/data",
+        "include_metrics": true,
+        "include_logs": true,
+        "compression_level": 9
+      },
+      "tags": ["backup", "database", "monitoring"]
+    },
+    {
+      "id": "backup_cleanup",
+      "name": "Backup File Cleanup",
+      "description": "Clean up old backup files based on retention policy",
+      "module": "lnmt.maintenance",
+      "function": "cleanup_old_backups",
+      "schedule": "0 3 * * 1",
+      "priority": 1,
+      "max_retries": 2,
+      "retry_delay": 300,
+      "timeout": 1800,
+      "dependencies": ["configuration_backup", "monitoring_data_backup"],
+      "enabled": true,
+      "args": [],
+      "kwargs": {
+        "backup_paths": [
+          "/opt/lnmt/backups/configs",
+          "/opt/lnmt/backups/data"
+        ],
+        "retention_days": 30,
+        "dry_run": false
+      },
+      "tags": ["maintenance", "cleanup", "backup"]
+    },
+    {
+      "id": "daily_report_generation",
+      "name": "Daily Monitoring Report",
+      "description": "Generate comprehensive daily monitoring report",
+      "module": "lnmt.reporting",
+      "function": "generate_daily_report",
+      "schedule": "0 8 * * *",
+      "priority": 2,
+      "max_retries": 2,
+      "retry_delay": 300,
+      "timeout": 1800,
+      "dependencies": ["system_metrics_collection", "security_log_analysis"],
+      "enabled": true,
+      "args": [],
+      "kwargs": {
+        "report_path": "/opt/lnmt/reports",
+        "format": "pdf",
+        "include_charts": true,
+        "email_recipients": [
+          "admin@company.com",
+          "network-team@company.com"
+        ]
+      },
+      "tags": ["reporting", "daily", "monitoring"]
+    },
+    {
+      "id": "weekly_summary_report",
+      "name": "Weekly Summary Report",
+      "description": "Generate weekly summary and trend analysis report",
+      "module": "lnmt.reporting",
+      "function": "generate_weekly_summary",
+      "schedule": "0 9 * * 1",
+      "priority": 1,
+      "max_retries": 2,
+      "retry_delay": 600,
+      "timeout": 3600,
+      "dependencies": ["daily_report_generation"],
+      "enabled": true,
+      "args": [],
+      "kwargs": {
+        "report_path": "/opt/lnmt/reports/weekly",
+        "include_trends": true,
+        "include_recommendations": true,
+        "format": "pdf",
+        "email_recipients": [
+          "management@company.com",
+          "it-director@company.com"
+        ]
+      },
+      "tags": ["reporting", "weekly", "summary"]
+    },
+    {
+      "id": "critical_alert_processor",
+      "name": "Critical Alert Processing",
+      "description": "Process and send critical alerts via multiple channels",
+      "module": "lnmt.alerting",
+      "function": "process_critical_alerts",
+      "schedule": "*/5 * * * *",
+      "priority": 4,
+      "max_retries": 5,
+      "retry_delay": 30,
+      "timeout": 300,
+      "dependencies": [],
+      "enabled": true,
+      "args": [],
+      "kwargs": {
+        "channels": ["email", "sms", "slack"],
+        "escalation_timeout": 300,
+        "suppress_duplicates": true,
+        "alert_retention_hours": 72
+      },
+      "tags": ["alerting", "critical", "notifications"]
+    },
+    {
+      "id": "database_maintenance",
+      "name": "Database Maintenance",
+      "description": "Perform database optimization and maintenance tasks",
+      "module": "lnmt.maintenance",
+      "function": "database_maintenance",
+      "schedule": "0 1 * * 0",
+      "priority": 1,
+      "max_retries": 2,
+      "retry_delay": 1800,
+      "timeout": 14400,
+      "dependencies": [],
+      "enabled": true,
+      "args": [],
+      "kwargs": {
+        "optimize_tables": true,
+        "rebuild_indexes": true,
+        "update_statistics": true,
+        "purge_old_data": true,
+        "purge_days": 90
+      },
+      "tags": ["maintenance", "database", "optimization"]
+    },
+    {
+      "id": "log_rotation",
+      "name": "System Log Rotation",
+      "description": "Rotate and compress system log files",
+      "module": "lnmt.maintenance",
+      "function": "rotate_system_logs",
+      "schedule": "0 0 * * *",
+      "priority": 1,
+      "max_retries": 2,
+      "retry_delay": 300,
+      "timeout": 1800,
+      "dependencies": [],
+      "enabled": true,
+      "args": [],
+      "kwargs": {
+        "log_paths": [
+          "/var/log/lnmt",
+          "/opt/lnmt/logs"
+        ],
+        "max_size_mb": 100,
+        "keep_files": 7,
+        "compress": true
+      },
+      "tags": ["maintenance", "logs", "rotation"]
+    },
+    {
+      "id": "system_health_check",
+      "name": "Comprehensive System Health Check",
+      "description": "Perform comprehensive health check of all system components",
+      "module": "lnmt.monitoring",
+      "function": "comprehensive_health_check",
+      "schedule": "0 */6 * * *",
+      "priority": 2,
+      "max_retries": 2,
+      "retry_delay": 600,
+      "timeout": 2400,
+      "dependencies": [],
+      "enabled": true,
+      "args": [],
+      "kwargs": {
+        "check_services": true,
+        "check_disk_space": true,
+        "check_memory": true,
+        "check_network": true,
+        "check_database": true,
+        "alert_on_issues": true
+      },
+      "tags": ["monitoring", "health", "system"]
+    },
+    {
+      "id": "performance_baseline_update",
+      "name": "Performance Baseline Update",
+      "description": "Update performance baselines based on historical data",
+      "module": "lnmt.analytics",
+      "function": "update_performance_baselines",
+      "schedule": "0 4 1 * *",
+      "priority": 1,
+      "max_retries": 2,
+      "retry_delay": 1800,
+      "timeout": 7200,
+      "dependencies": ["system_metrics_collection"],
+      "enabled": true,
+      "args": [],
+      "kwargs": {
+        "lookback_days": 30,
+        "confidence_level": 0.95,
+        "update_thresholds": true,
+        "generate_report": true
+      },
+      "tags": ["analytics", "performance", "baseline"]
+    },
+    {
+      "id": "capacity_planning_analysis",
+      "name": "Capacity Planning Analysis",
+      "description": "Analyze capacity trends and generate planning recommendations",
+      "module": "lnmt.analytics",
+      "function": "capacity_planning_analysis",
+      "schedule": "0 6 15 * *",
+      "priority": 1,
+      "max_retries": 2,
+      "retry_delay": 3600,
+      "timeout": 10800,
+      "dependencies": ["performance_baseline_update"],
+      "enabled": true,
+      "args": [],
+      "kwargs": {
+        "forecast_months": 6,
+        "growth_rate_analysis": true,
+        "threshold_analysis": true,
+        "recommendation_engine": true,
+        "report_format": "pdf"
+      },
+      "tags": ["analytics", "capacity", "planning"]
+    },
+    {
+      "id": "vulnerability_scan",
+      "name": "Network Vulnerability Scan",
+      "description": "Perform automated vulnerability scanning of network devices",
+      "module": "lnmt.security",
+      "function": "network_vulnerability_scan",
+      "schedule": "0 22 * * 0",
+      "priority": 2,
+      "max_retries": 2,
+      "retry_delay": 3600,
+      "timeout": 14400,
+      "dependencies": ["network_status_poll"],
+      "enabled": true,
+      "args": [],
+      "kwargs": {
+        "scan_types": ["port", "service", "vulnerability"],
+        "intensity": "normal",
+        "generate_report": true,
+        "alert_on_critical": true,
+        "exclude_maintenance_windows": true
+      },
+      "tags": ["security", "vulnerability", "scanning"]
+    }
+  ],
+  "notification_settings": {
+    "email": {
+      "smtp_server": "smtp.company.com",
+      "smtp_port": 587,
+      "use_tls": true,
+      "username": "lnmt-scheduler@company.com",
+      "from_address": "LNMT Scheduler <lnmt-scheduler@company.com>"
+    },
+    "slack": {
+      "webhook_url": "https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK",
+      "channel": "#network-alerts",
+      "username": "LNMT-Bot"
+    }
+  },
+  "maintenance_windows": [
+    {
+      "name": "Weekly Maintenance Window",
+      "start_time": "02:00",
+      "end_time": "04:00",
+      "days": ["Sunday"],
+      "timezone": "UTC",
+      "affected_jobs": ["vulnerability_scan", "database_maintenance"]
+    }
+  ]
+}
+
+---
+# requirements.txt
+croniter>=1.3.0
+tabulate>=0.9.0
+sqlite3  # Built-in with Python
+asyncio  # Built-in with Python
+
+# Optional dependencies for enhanced functionality
+psutil>=5.9.0          # For system metrics
+paramiko>=2.11.0       # For SSH connections
+requests>=2.28.0       # For HTTP/REST API calls
+pyyaml>=6.0           # For YAML configuration support
+jinja2>=3.1.0         # For report templating
+matplotlib>=3.5.0     # For chart generation
+reportlab>=3.6.0      # For PDF report generation
+
+---
+# setup.py
+from setuptools import setup, find_packages
+
+with open("README.md", "r", encoding="utf-8") as fh:
+    long_description = fh.read()
+
+with open("requirements.txt", "r", encoding="utf-8") as fh:
+    requirements = [line.strip() for line in fh if line.strip() and not line.startswith("#")]
+
+setup(
+    name="lnmt-scheduler",
+    version="1.0.0",
+    author="LNMT Development Team",
+    author_email="dev@lnmt.local",
+    description="A robust, pluggable scheduler for LNMT automation tasks",
+    long_description=long_description,
+    long_description_content_type="text/markdown",
+    url="https://github.com/lnmt/scheduler",
+    packages=find_packages(),
+    classifiers=[
+        "Development Status :: 4 - Beta",
+        "Intended Audience :: System Administrators",
+        "License :: OSI Approved :: MIT License",
+        "Operating System :: OS Independent",
+        "Programming Language :: Python :: 3",
+        "Programming Language :: Python :: 3.8",
+        "Programming Language :: Python :: 3.9",
+        "Programming Language :: Python :: 3.10",
+        "Programming Language :: Python :: 3.11",
+        "Topic :: System :: Systems Administration",
+        "Topic :: System :: Monitoring",
+        "Topic :: System :: Networking :: Monitoring",
+    ],
+    python_requires=">=3.8",
+    install_requires=requirements,
+    extras_require={
+        "dev": [
+            "pytest>=7.0.0",
+            "pytest-asyncio>=0.21.0",
+            "pytest-cov>=4.0.0",
+            "black>=22.0.0",
+            "flake8>=5.0.0",
+            "mypy>=1.0.0",
+        ],
+        "docs": [
+            "sphinx>=5.0.0",
+            "sphinx-rtd-theme>=1.2.0",
+        ],
+    },
+    entry_points={
+        "console_scripts": [
+            "schedctl=cli.schedctl:main",
+            "lnmt-scheduler=services.scheduler:main",
+        ],
+    },
+    package_data={
+        "": ["*.json", "*.yaml", "*.yml"],
+    },
+    include_package_data=True,
+)
+
+---
+# Makefile
+.PHONY: install test clean lint format docs
+
+# Installation
+install:
+	pip install -e .
+
+install-dev:
+	pip install -e .[dev,docs]
+
+# Testing
+test:
+	python -m pytest tests/ -v --cov=services --cov=cli
+
+test-integration:
+	python examples/example_jobs_tests.py test
+
+demo:
+	python examples/example_jobs_tests.py demo
+
+# Code Quality
+lint:
+	flake8 services/ cli/ examples/
+	mypy services/ cli/
+
+format:
+	black services/ cli/ examples/ tests/
+
+# Documentation
+docs:
+	cd docs && make html
+
+# Cleanup
+clean:
+	find . -type f -name "*.pyc" -delete
+	find . -type d -name "__pycache__" -delete
+	find . -type d -name "*.egg-info" -exec rm -rf {} +
+	rm -rf build/ dist/ .coverage htmlcov/
+
+# Development
+dev-setup: install-dev
+	pre-commit install
+
+# Packaging
+build:
+	python setup.py sdist bdist_wheel
+
+upload-test:
+	twine upload --repository testpypi dist/*
+
+upload:
+	twine upload dist/*
+
+# Docker
+docker-build:
+	docker build -t lnmt-scheduler:latest .
+
+docker-run:
+	docker run -d --name lnmt-scheduler \
+		-v $(PWD)/config:/app/config \
+		-v $(PWD)/data:/app/data \
+		lnmt-scheduler:latest

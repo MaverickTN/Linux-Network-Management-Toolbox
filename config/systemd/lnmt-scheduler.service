@@ -1,0 +1,47 @@
+[Unit]
+Description=LNMT Scheduler Service
+Documentation=https://github.com/yourusername/lnmt
+After=network.target lnmt.service
+Requires=lnmt.service
+
+[Service]
+Type=simple
+User=lnmt
+Group=lnmt
+WorkingDirectory=/opt/lnmt
+Environment="PATH=/opt/lnmt/venv/bin:/usr/local/bin:/usr/bin:/bin"
+Environment="PYTHONPATH=/opt/lnmt"
+Environment="LNMT_CONFIG=/etc/lnmt/config.yml"
+EnvironmentFile=-/etc/lnmt/lnmt.env
+
+ExecStart=/opt/lnmt/venv/bin/python -m lnmt.services.lnmt_scheduler
+
+Restart=always
+RestartSec=10
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/lnmt /var/log/lnmt /var/backups/lnmt
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictRealtime=true
+RestrictNamespaces=true
+RestrictSUIDSGID=true
+RemoveIPC=true
+
+# Resource limits
+LimitNOFILE=16384
+MemoryLimit=512M
+CPUQuota=50%
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=lnmt-scheduler
+
+[Install]
+WantedBy=multi-user.target

@@ -1,1 +1,0 @@
-# Reservation sync with logging and transaction safety (placeholder)

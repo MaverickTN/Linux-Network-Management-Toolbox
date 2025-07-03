@@ -1,1 +1,0 @@
--- Migration to create session_activity_log table

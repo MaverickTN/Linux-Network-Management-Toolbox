@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LNMT Drop-In Theme System Demo</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            transition: all 0.3s ease;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+            padding: 1rem 0;
+            border-bottom: 2px solid;
+        }
+
+        .theme-controls {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+        }
+
+        .theme-selector {
+            padding: 8px 12px;
+            border: 2px solid;
+            border-radius: 6px;
+            background: transparent;
+            cursor: pointer;
+            min-width: 200px;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .info-panel {
+            background: rgba(0,0,0,0.05);
+            padding: 1.5rem;
+            border-radius: 8px;
+            margin-bottom: 2rem;
+            border-left: 4px solid;
+        }
+
+        .theme-files {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1rem;
+            margin: 2rem 0;
+        }
+
+        .theme-file-card {
+            padding: 1rem;
+            border: 2px solid;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .theme-file-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+
+        .theme-file-card.active {
+            border-width: 3px;
+        }
+
+        .theme-file-card .file-name {
+            font-weight: bold;
+            font-family: monospace;
+        }
+
+        .theme-file-card .file-size {
+            font-size: 0.8rem;
+            opacity: 0.7;
+        }
+
+        .cli-demo {
+            background: #1a1a1a;
+            color: #e0e0e0;
+            padding: 1.5rem;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            margin: 2rem 0;
+            overflow-x: auto;
+            border: 2px solid;
+        }
+
+        .status-bar {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            padding: 1rem;
+            border-radius: 8px;
+            border: 2px solid;
+            background: var(--background, #f0f0f0);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            min-width: 250px;
+        }
+
+        .feature-list {
+            list-style: none;
+            padding: 0;
+        }
+
+        .feature-list li {
+            padding: 0.5rem 0;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .feature-list li:before {
+            content: "✓ ";
+            color: var(--primary, #007bff);
+            font-weight: bold;
+        }
+
+        /* Default theme styles (fallback) */
+        body {
+            background: #f5f6fa;
+            color: #2c3e50;
+        }
+
+        .header {
+            border-color: #3498db;
+        }
+
+        .theme-selector {
+            border-color: #3498db;
+            color: #2c3e50;
+        }
+
+        .info-panel {
+            border-color: #e74c3c;
+        }
+
+        .theme-file-card {
+            border-color: #95a5a6;
+        }
+
+        .theme-file-card.active {
+            border-color: #e74c3c;
+        }
+
+        .cli-demo {
+            border-color: #34495e;
+        }
+
+        .status-bar {
+            border-color: #3498db;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1>🎨 LNMT Drop-In Theme System</h1>
+            <div class="theme-controls">
+                <label for="theme-selector">Theme:</label>
+                <select id="theme-selector" class="theme-selector">
+                    <option value="">Loading themes...</option>
+                </select>
+                <button class="btn" onclick="refreshThemes()">🔄 Refresh</button>
+            </div>
+        </header>
+
+        <div class="info-panel">
+            <h2>📋 How Drop-In Themes Work</h2>
+            <p>Each <code>.theme</code> file is a complete, self-contained theme with both web CSS and CLI shell code embedded. Just drop theme files into the <code>themes/</code> folder and they're automatically detected!</p>
+        </div>
+
+        <div class="grid">
+            <div class="card">
+                <h3 class="text-primary">🌐 Web Interface</h3>
+                <p class="text-success">✅ CSS automatically extracted and applied</p>
+                <p class="text-info">ℹ️ Themes indexed from folder scan</p>
+                <button class="btn">Test Button</button>
+                <input class="input" placeholder="Test input field" style="margin-top: 1rem;">
+            </div>
+            
+            <div class="card">
+                <h3 class="text-primary">🖥️ CLI Interface</h3>
+                <p class="text-warning">⚠️ Shell functions embedded in theme</p>
+                <p class="text-info">ℹ️ Source any .theme file directly</p>
+                <button class="btn" onclick="showCLIExample()">Show CLI Example</button>
+            </div>
+            
+            <div class="card">
+                <h3 class="text-primary">📁 File Management</h3>
+                <p class="text-success">✅ One file per theme pair</p>
+                <p class="text-info">ℹ️ Easy to share and distribute</p>
+                <button class="btn" onclick="showThemeFiles()">View Theme Files</button>
+            </div>
+        </div>
+
+        <h2>📂 Available Theme Files</h2>
+        <div class="theme-files" id="theme-files">
+            <!-- Theme file cards will be populated by JavaScript -->
+        </div>
+
+        <div class="alert alert-info">
+            <strong>💡 Pro Tip:</strong> Create your own themes by copying an existing .theme file and modifying the colors and metadata!
+        </div>
+
+        <div class="cli-demo">
+            <div style="color: #00ff41;">$ ls themes/</div>
+            <div style="color: #ffffff;">dark.theme  light.theme  solarized.theme  matrix.theme</div>
+            <br>
+            <div style="color: #00ff41;">$ source themes/dark.theme</div>
+            <div style="color: #92f441;">✅ Theme 'Dark' loaded successfully</div>
+            <br>
+            <div style="color: #00ff41;">$ lnmt_print_success "Network connection established"</div>
+            <div style="color: #92f441;">✅ Network connection established</div>
+            <br>
+            <div style="color: #00ff41;">$ lnmt_banner "System Status"</div>
+            <div style="color: #3498db;">╔════════════════════════════════════════╗</div>
+            <div style="color: #3498db;">║</div><div style="color: #ffffff;">    LNMT - System Status           </div><div style="color: #3498db;">║</div>
+            <div style="color: #3498db;">╚════════════════════════════════════════╝</div>
+        </div>
+
+        <h2>🚀 Features</h2>
+        <div class="grid">
+            <div class="card">
+                <h3 class="text-primary">Drop-In Ready</h3>
+                <ul class="feature-list">
+                    <li>Single .theme file contains everything</li>
+                    <li>Auto-detected when placed in themes/</li>
+                    <li>No compilation or build step needed</li>
+                    <li>Instant theme switching</li>
+                </ul>
+            </div>
+            
+            <div class="card">
+                <h3 class="text-primary">Cross-Platform</h3>
+                <ul class="feature-list">
+                    <li>Web CSS and CLI colors paired</li>
+                    <li>ANSI and true color support</li>
+                    <li>Consistent branding across interfaces</li>
+                    <li>Helper functions included</li>
+                </ul>
+            </div>
+            
+            <div class="card">
+                <h3 class="text-primary">Easy Distribution</h3>
+                <ul class="feature-list">
+                    <li>Share single .theme file</li>
+                    <li>Version metadata embedded</li>
+                    <li>Author attribution included</li>
+                    <li>Self-documenting format</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <div class="status-bar">
+        <div><strong>Current Theme:</strong> <span id="current-theme-name">Loading...</span></div>
+        <div><strong>Type:</strong> <span id="current-theme-type">-</span></div>
+        <div><strong>Author:</strong> <span id="current-theme-author">-</span></div>
+        <div style="margin-top: 0.5rem; font-size: 0.8rem; opacity: 0.7;">
+            Themes auto-indexed from folder
+        </div>
+    </div>
+
+    <script>
+        // Mock theme data (simulates what would be loaded from .theme files)
+        const mockThemes = {
+            dark: {
+                id: 'dark',
+                name: 'Dark',
+                author: 'LNMT Team',
+                description: 'Clean dark theme with blue accents',
+                type: 'dark',
+                version: '1.0.0',
+                filename: 'dark.theme',
+                filesize: '4.2 KB',
+                colors: {
+                    primary: '#3498db',
+                    background: '#23272e',
+                    foreground: '#e0e0e0',
+                    accent: '#f39c12',
+                    success: '#43a047',
+                    danger: '#e74c3c',
+                    warning: '#ff9800',
+                    info: '#007bff'
+                }
+            },
+            light: {
+                id: 'light',
+                name: 'Light',
+                author: 'LNMT Team',
+                type: 'light',
+                version: '1.0.0',
+                filename: 'light.theme',
+                filesize: '4.1 KB',
+                colors: {
+                    primary: '#007bff',
+                    background: '#f5f6fa',
+                    foreground: '#222426',
+                    accent: '#39b385',
+                    success: '#388e3c',
+                    danger: '#c0392b',
+                    warning: '#ffb300',
+                    info: '#1565c0'
+                }
+            },
+            solarized: {
+                id: 'solarized',
+                name: 'Solarized',
+                author: 'Ethan Schoonover',
+                type: 'dark',
+                version: '1.0.0',
+                filename: 'solarized.theme',
+                filesize: '4.3 KB',
+                colors: {
+                    primary: '#268bd2',
+                    background: '#002b36',
+                    foreground: '#93a1a1',
+                    accent: '#b58900',
+                    success: '#859900',
+                    danger: '#dc322f',
+                    warning: '#cb4b16',
+                    info: '#839496'
+                }
+            },
+            matrix: {
+                id: 'matrix',
+                name: 'Green Matrix',
+                author: 'LNMT Team',
+                type: 'dark',
+                version: '1.0.0',
+                filename: 'matrix.theme',
+                filesize: '4.0 KB',
+                colors: {
+                    primary: '#00ff41',
+                    background: '#101010',
+                    foreground: '#bada55',
+                    accent: '#00ff41',
+                    success: '#21f300',
+                    danger: '#ff1133',
+                    warning: '#ffea00',
+                    info: '#43d9ad'
+                }
+            }
+        };
+
+        let currentTheme = 'light';
+
+        // Apply theme to the page
+        function applyTheme(themeId) {
+            const theme = mockThemes[themeId];
+            if (!theme) return;
+
+            const root = document.documentElement;
+            const colors = theme.colors;
+
+            // Apply CSS custom properties
+            root.style.setProperty('--primary', colors.primary);
+            root.style.setProperty('--background', colors.background);
+            root.style.setProperty('--foreground', colors.foreground);
+            root.style.setProperty('--accent', colors.accent);
+            root.style.setProperty('--success', colors.success);
+            root.style.setProperty('--danger', colors.danger);
+            root.style.setProperty('--warning', colors.warning);
+            root.style.setProperty('--info', colors.info);
+
+            // Apply to body
+            document.body.style.background = colors.background;
+            document.body.style.color = colors.foreground;
+
+            // Update status bar
+            document.getElementById('current-theme-name').textContent = theme.name;
+            document.getElementById('current-theme-type').textContent = theme.type;
+            document.getElementById('current-theme-author').textContent = theme.author;
+
+            currentTheme = themeId;
+            updateThemeFiles();
+        }
+
+        // Populate theme selector
+        function populateThemeSelector() {
+            const selector = document.getElementById('theme-selector');
+            selector.innerHTML = '<option value="">Select Theme...</option>';
+            
+            Object.values(mockThemes).forEach(theme => {
+                const option = document.createElement('option');
+                option.value = theme.id;
+                option.textContent = `${theme.name} (${theme.type})`;
+                selector.appendChild(option);
+            });
+
+            selector.value = currentTheme;
+        }
+
+        // Show theme files
+        function updateThemeFiles() {
+            const container = document.getElementById('theme-files');
+            container.innerHTML = '';
+
+            Object.values(mockThemes).forEach(theme => {
+                const card = document.createElement('div');
+                card.className = `theme-file-card ${theme.id === currentTheme ? 'active' : ''}`;
+                card.style.borderColor = theme.colors.primary;
+                card.onclick = () => applyTheme(theme.id);
+
+                card.innerHTML = `
+                    <div class="file-name">${theme.filename}</div>
+                    <div style="margin: 0.5rem 0;">
+                        <strong>${theme.name}</strong> v${theme.version}
+                    </div>
+                    <div>by ${theme.author}</div>
+                    <div class="file-size">${theme.filesize}</div>
+                    <div style="margin-top: 0.5rem; display: flex; gap: 0.5rem;">
+                        <div style="width: 20px; height: 20px; background: ${theme.colors.primary}; border-radius: 50%; border: 2px solid #fff;"></div>
+                        <div style="width: 20px; height: 20px; background: ${theme.colors.success}; border-radius: 50%; border: 2px solid #fff;"></div>
+                        <div style="width: 20px; height: 20px; background: ${theme.colors.danger}; border-radius: 50%; border: 2px solid #fff;"></div>
+                    </div>
+                `;
+
+                container.appendChild(card);
+            });
+        }
+
+        // Event handlers
+        function refreshThemes() {
+            console.log('🔄 Refreshing theme index...');
+            populateThemeSelector();
+            updateThemeFiles();
+            alert('Themes refreshed! In a real implementation, this would re-scan the themes/ folder.');
+        }
+
+        function showCLIExample() {
+            const theme = mockThemes[currentTheme];
+            alert(`CLI Example for ${theme.name}:\n\n` +
+                  `$ source themes/${theme.filename}\n` +
+                  `✅ Theme '${theme.name}' loaded successfully\n\n` +
+                  `$ lnmt_print_success "Connected to server"\n` +
+                  `$ lnmt_banner "Network Status"\n` +
+                  `$ lnmt_test_cli_colors`);
+        }
+
+        function showThemeFiles() {
+            const files = Object.values(mockThemes).map(t => t.filename).join(', ');
+            alert(`Theme Files in themes/ folder:\n\n${files}\n\n` +
+                  `Each .theme file contains:\n` +
+                  `• Theme metadata and colors\n` +
+                  `• Complete CSS for web interface\n` +
+                  `• Shell functions for CLI interface\n` +
+                  `• Auto-loading capabilities`);
+        }
+
+        // Theme selector change handler
+        document.getElementById('theme-selector').addEventListener('change', (e) => {
+            if (e.target.value) {
+                applyTheme(e.target.value);
+            }
+        });
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            populateThemeSelector();
+            applyTheme('light');
+            
+            // Simulate theme loading message
+            setTimeout(() => {
+                console.log('🎨 LNMT Theme System: Indexed 4 themes from themes/ folder');
+            }, 500);
+        });
+
+        // Add some interactive effects
+        document.addEventListener('click', (e) => {
+            if (e.target.classList.contains('btn')) {
+                e.target.style.transform = 'scale(0.95)';
+                setTimeout(() => {
+                    e.target.style.transform = '';
+                }, 150);
+            }
+        });
+    </script>
+</body>
+</html>

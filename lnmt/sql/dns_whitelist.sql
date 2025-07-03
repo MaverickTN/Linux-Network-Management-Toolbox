@@ -1,5 +1,0 @@
-CREATE TABLE IF NOT EXISTS dns_whitelist (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    domain TEXT NOT NULL UNIQUE,
-    description TEXT
-);

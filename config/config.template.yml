@@ -1,0 +1,285 @@
+# LNMT Configuration Template
+# Copy this file to config.yml and update with your settings
+# Version: 2.0.0
+
+# Application Settings
+app:
+  name: "LNMT - Local Network Management Tool"
+  version: "2.0.0"
+  environment: "production"  # development, staging, production
+  debug: false
+  timezone: "UTC"
+  locale: "en_US"
+
+# Server Configuration
+server:
+  host: "0.0.0.0"
+  port: 8080
+  workers: 4  # Number of worker processes
+  ssl:
+    enabled: false
+    cert_file: "/etc/lnmt/certs/server.crt"
+    key_file: "/etc/lnmt/certs/server.key"
+    ca_file: "/etc/lnmt/certs/ca.crt"
+  
+# Database Configuration
+database:
+  type: "postgresql"  # postgresql or mysql
+  host: "localhost"
+  port: 5432
+  name: "lnmt_db"
+  user: "lnmt_user"
+  password: "CHANGE_ME_NOW"  # Use environment variable in production
+  ssl_mode: "prefer"  # disable, require, prefer
+  pool:
+    min_size: 5
+    max_size: 20
+    timeout: 30
+    idle_timeout: 600
+  
+# Redis Configuration (for caching and sessions)
+redis:
+  enabled: true
+  host: "localhost"
+  port: 6379
+  password: ""  # Leave empty if no password
+  db: 0
+  ssl: false
+  pool_size: 10
+
+# Authentication Settings
+auth:
+  session_lifetime: 3600  # seconds
+  remember_me_duration: 604800  # 7 days in seconds
+  max_login_attempts: 5
+  lockout_duration: 300  # seconds
+  password:
+    min_length: 12
+    require_uppercase: true
+    require_lowercase: true
+    require_numbers: true
+    require_special: true
+    history_count: 5  # Remember last N passwords
+  mfa:
+    enabled: false
+    issuer: "LNMT"
+    qr_size: 200
+  oauth:
+    enabled: false
+    providers:
+      - name: "ldap"
+        enabled: false
+        server: "ldap://ldap.example.com"
+        port: 389
+        base_dn: "dc=example,dc=com"
+        user_dn: "cn=users,dc=example,dc=com"
+        bind_dn: "cn=admin,dc=example,dc=com"
+        bind_password: ""
+        
+# API Configuration
+api:
+  base_path: "/api/v1"
+  rate_limiting:
+    enabled: true
+    requests_per_minute: 60
+    burst: 100
+  cors:
+    enabled: true
+    origins: ["*"]
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+    headers: ["Content-Type", "Authorization"]
+  pagination:
+    default_limit: 50
+    max_limit: 1000
+    
+# Logging Configuration
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
+  format: "json"  # json or text
+  outputs:
+    console:
+      enabled: true
+      level: "INFO"
+    file:
+      enabled: true
+      level: "DEBUG"
+      path: "/var/log/lnmt/app.log"
+      max_size: "100MB"
+      max_backups: 10
+      max_age: 30  # days
+    syslog:
+      enabled: false
+      host: "localhost"
+      port: 514
+      facility: "local0"
+      
+# Network Discovery Settings
+discovery:
+  enabled: true
+  networks:
+    - "192.168.1.0/24"
+    - "10.0.0.0/16"
+  exclude_ips:
+    - "192.168.1.1"
+    - "10.0.0.1"
+  scan_interval: 3600  # seconds
+  timeout: 10  # seconds per host
+  methods:
+    ping: true
+    arp: true
+    snmp: true
+    dns: true
+    
+# SNMP Configuration
+snmp:
+  version: "2c"  # 1, 2c, or 3
+  community: "public"  # Default read community
+  timeout: 5
+  retries: 3
+  v3:
+    security_level: "authPriv"  # noAuthNoPriv, authNoPriv, authPriv
+    auth_protocol: "SHA"  # MD5 or SHA
+    priv_protocol: "AES"  # DES or AES
+    
+# Backup Configuration
+backup:
+  enabled: true
+  schedule: "0 2 * * *"  # Cron expression - daily at 2 AM
+  retention_days: 30
+  destinations:
+    local:
+      enabled: true
+      path: "/var/backups/lnmt"
+    remote:
+      enabled: false
+      type: "sftp"  # sftp, s3, azure, gcs
+      host: "backup.example.com"
+      port: 22
+      username: "backup_user"
+      password: ""
+      path: "/backups/lnmt"
+  compression:
+    enabled: true
+    type: "gzip"  # gzip, bzip2, xz
+    level: 6
+  encryption:
+    enabled: true
+    algorithm: "AES-256-CBC"
+    key_file: "/etc/lnmt/keys/backup.key"
+    
+# Email Configuration
+email:
+  enabled: false
+  smtp:
+    host: "smtp.gmail.com"
+    port: 587
+    username: "noreply@example.com"
+    password: ""
+    use_tls: true
+    use_ssl: false
+  from_address: "noreply@example.com"
+  from_name: "LNMT System"
+  templates_path: "/etc/lnmt/email_templates"
+  
+# Monitoring and Health Checks
+monitoring:
+  enabled: true
+  health_check_interval: 60  # seconds
+  metrics:
+    enabled: true
+    port: 9090
+    path: "/metrics"
+  alerts:
+    enabled: true
+    channels:
+      - type: "email"
+        enabled: true
+        recipients: ["admin@example.com"]
+      - type: "webhook"
+        enabled: false
+        url: "https://hooks.slack.com/services/YOUR/WEBHOOK/URL"
+        method: "POST"
+        headers:
+          Content-Type: "application/json"
+          
+# Theme Configuration
+themes:
+  default: "default"
+  allow_user_selection: true
+  path: "/etc/lnmt/themes"
+  
+# Plugin/Integration Settings
+integrations:
+  enabled: true
+  path: "/etc/lnmt/integrations"
+  auto_load: true
+  allowed_types:
+    - "webhook"
+    - "api"
+    - "database"
+    - "syslog"
+    
+# Performance Settings
+performance:
+  cache:
+    enabled: true
+    ttl: 3600  # seconds
+    max_size: "1GB"
+  database:
+    query_timeout: 30  # seconds
+    slow_query_threshold: 1000  # milliseconds
+  api:
+    request_timeout: 30  # seconds
+    max_request_size: "10MB"
+    
+# Security Settings
+security:
+  csrf_protection: true
+  xss_protection: true
+  content_security_policy: "default-src 'self'"
+  hsts:
+    enabled: true
+    max_age: 31536000
+    include_subdomains: true
+    preload: true
+  encryption:
+    algorithm: "AES-256-GCM"
+    key_rotation_days: 90
+    
+# File Storage
+storage:
+  type: "local"  # local, s3, azure, gcs
+  local:
+    base_path: "/var/lib/lnmt"
+    temp_path: "/tmp/lnmt"
+  s3:
+    bucket: ""
+    region: "us-east-1"
+    access_key: ""
+    secret_key: ""
+    
+# Scheduler Configuration
+scheduler:
+  enabled: true
+  executor: "threadpool"  # threadpool or processpool
+  max_workers: 10
+  job_defaults:
+    coalesce: true
+    max_instances: 3
+    misfire_grace_time: 30
+    
+# Feature Flags
+features:
+  dns_management: true
+  vlan_management: true
+  backup_restore: true
+  reporting: true
+  api_access: true
+  multi_tenancy: false
+  
+# Development Settings (ignored in production)
+development:
+  auto_reload: true
+  debug_toolbar: true
+  profiling: false
+  mock_data: false

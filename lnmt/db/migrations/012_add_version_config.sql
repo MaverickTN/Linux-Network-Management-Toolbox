@@ -1,1 +1,0 @@
--- Add 'current_version', 'latest_version_cache', 'latest_version_cache_time', 'update_check_url', 'release_notes_url' to meta

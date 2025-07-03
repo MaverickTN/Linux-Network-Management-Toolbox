@@ -1,1 +1,0 @@
-# App mapping DB logic

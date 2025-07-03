@@ -1,0 +1,420 @@
+# GitLab CI/CD Pipeline for LNMT
+# Alternative to GitHub Actions for GitLab users
+
+stages:
+  - validate
+  - test
+  - security
+  - build
+  - package
+  - deploy
+  - post-deploy
+
+variables:
+  PYTHON_VERSION: "3.11"
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+  DOCKER_DRIVER: overlay2
+  DOCKER_TLS_CERTDIR: "/certs"
+
+# Cache configuration
+.python_cache: &python_cache
+  cache:
+    key: "${CI_COMMIT_REF_SLUG}-python"
+    paths:
+      - .cache/pip/
+      - venv/
+
+.docker_cache: &docker_cache
+  cache:
+    key: "${CI_COMMIT_REF_SLUG}-docker"
+    paths:
+      - .docker/
+
+# Templates
+.python_job: &python_job
+  image: python:${PYTHON_VERSION}
+  <<: *python_cache
+  before_script:
+    - python -m venv venv
+    - source venv/bin/activate
+    - pip install --upgrade pip
+    - pip install -r config/requirements.txt
+
+# Stage 1: Validation
+validate:syntax:
+  <<: *python_job
+  stage: validate
+  script:
+    - python -m py_compile services/*.py cli/*.py web/*.py
+    - python -m py_compile integration/*.py installer/*.py
+  only:
+    - branches
+    - merge_requests
+
+validate:formatting:
+  <<: *python_job
+  stage: validate
+  script:
+    - pip install black isort flake8
+    - black --check --diff .
+    - isort --check-only --diff .
+    - flake8 services/ cli/ web/ --count --statistics
+  only:
+    - branches
+    - merge_requests
+
+validate:types:
+  <<: *python_job
+  stage: validate
+  script:
+    - pip install mypy
+    - mypy services/ cli/ web/ integration/ installer/ --ignore-missing-imports
+  allow_failure: true
+  only:
+    - branches
+    - merge_requests
+
+# Stage 2: Testing
+test:unit:
+  <<: *python_job
+  stage: test
+  services:
+    - postgres:14
+    - redis:7-alpine
+  variables:
+    POSTGRES_DB: lnmt_test
+    POSTGRES_USER: lnmt
+    POSTGRES_PASSWORD: lnmt_test
+    DATABASE_URL: postgresql://lnmt:lnmt_test@postgres:5432/lnmt_test
+    REDIS_URL: redis://redis:6379
+  script:
+    - pip install pytest pytest-cov pytest-html pytest-xdist
+    - pytest tests/ -v --tb=short --maxfail=10
+      --junitxml=report.xml
+      --html=report.html
+      --cov=services --cov=cli --cov=web
+      --cov-report=xml --cov-report=html
+      --cov-fail-under=70
+  coverage: '/TOTAL.*\s+(\d+%)$/'
+  artifacts:
+    when: always
+    reports:
+      junit: report.xml
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage.xml
+    paths:
+      - htmlcov/
+      - report.html
+    expire_in: 1 week
+  only:
+    - branches
+    - merge_requests
+
+test:integration:
+  <<: *python_job
+  stage: test
+  services:
+    - postgres:14
+    - redis:7-alpine
+  variables:
+    POSTGRES_DB: lnmt_test
+    POSTGRES_USER: lnmt
+    POSTGRES_PASSWORD: lnmt_test
+    DATABASE_URL: postgresql://lnmt:lnmt_test@postgres:5432/lnmt_test
+    REDIS_URL: redis://redis:6379
+  script:
+    - pip install pytest pytest-asyncio
+    - pytest tests/integration_tests.py -v --tb=short
+  artifacts:
+    reports:
+      junit: integration-report.xml
+  only:
+    - branches
+    - merge_requests
+
+test:performance:
+  image: grafana/k6:latest
+  stage: test
+  script:
+    - k6 run --vus 10 --duration 30s tests/performance/load-test.js
+  artifacts:
+    reports:
+      performance: k6-results.json
+  only:
+    - merge_requests
+    - main
+
+# Stage 3: Security
+security:sast:
+  <<: *python_job
+  stage: security
+  script:
+    - pip install bandit safety
+    - bandit -r services/ cli/ web/ -f json -o bandit-report.json
+    - safety check --json --output safety-report.json
+  artifacts:
+    reports:
+      sast: bandit-report.json
+    paths:
+      - safety-report.json
+    expire_in: 1 week
+  only:
+    - branches
+    - merge_requests
+
+security:dependency_scanning:
+  image: python:${PYTHON_VERSION}
+  stage: security
+  script:
+    - pip install safety pip-audit
+    - pip-audit --format=json --output=dependency-scan.json
+  artifacts:
+    reports:
+      dependency_scanning: dependency-scan.json
+  only:
+    - branches
+    - merge_requests
+
+security:secrets:
+  image: trufflesecurity/trufflehog:latest
+  stage: security
+  script:
+    - trufflehog git file://$CI_PROJECT_DIR --json > secrets-scan.json
+  artifacts:
+    paths:
+      - secrets-scan.json
+    expire_in: 1 week
+  allow_failure: true
+  only:
+    - branches
+    - merge_requests
+
+# Stage 4: Build
+build:python:
+  <<: *python_job
+  stage: build
+  script:
+    - pip install build wheel
+    - python -m build
+    - ls -la dist/
+  artifacts:
+    paths:
+      - dist/
+    expire_in: 1 month
+  only:
+    - main
+    - tags
+    - merge_requests
+
+build:docker:
+  image: docker:24.0.5
+  stage: build
+  services:
+    - docker:24.0.5-dind
+  <<: *docker_cache
+  variables:
+    DOCKER_BUILDKIT: 1
+  before_script:
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+  script:
+    - |
+      if [[ "$CI_COMMIT_TAG" ]]; then
+        VERSION=$CI_COMMIT_TAG
+      else
+        VERSION=$CI_COMMIT_SHORT_SHA
+      fi
+    - |
+      docker build \
+        --build-arg VERSION=$VERSION \
+        --cache-from $CI_REGISTRY_IMAGE:cache \
+        --tag $CI_REGISTRY_IMAGE:$VERSION \
+        --tag $CI_REGISTRY_IMAGE:latest \
+        -f docs/dockerfile.txt .
+    - docker push $CI_REGISTRY_IMAGE:$VERSION
+    - docker push $CI_REGISTRY_IMAGE:latest
+  only:
+    - main
+    - tags
+
+# Stage 5: Package
+package:installer:
+  <<: *python_job
+  stage: package
+  dependencies:
+    - build:python
+  script:
+    - |
+      if [[ "$CI_COMMIT_TAG" ]]; then
+        VERSION=$CI_COMMIT_TAG
+      else
+        VERSION=$(python scripts/generate_version.py)
+      fi
+    - python scripts/release_manager.py installer --version $VERSION
+  artifacts:
+    paths:
+      - dist/lnmt-installer-*.tar.gz
+    expire_in: 1 month
+  only:
+    - main
+    - tags
+
+package:bundle:
+  <<: *python_job
+  stage: package
+  dependencies:
+    - build:python
+  script:
+    - |
+      if [[ "$CI_COMMIT_TAG" ]]; then
+        VERSION=$CI_COMMIT_TAG
+      else
+        VERSION=$(python scripts/generate_version.py)
+      fi
+    - python scripts/release_manager.py bundle --version $VERSION
+  artifacts:
+    paths:
+      - dist/lnmt-*.tar.gz
+    expire_in: 1 month
+  only:
+    - main
+    - tags
+
+# Stage 6: Deploy
+deploy:staging:
+  image: alpine:latest
+  stage: deploy
+  environment:
+    name: staging
+    url: https://staging.lnmt.example.com
+  before_script:
+    - apk add --no-cache curl
+  script:
+    - echo "Deploying to staging environment..."
+    - curl -X POST "$STAGING_DEPLOY_WEBHOOK" -H "Authorization: Bearer $DEPLOY_TOKEN"
+    - sleep 30  # Wait for deployment
+    - curl -f "$STAGING_URL/health" || exit 1
+  only:
+    - main
+  when: manual
+
+deploy:production:
+  image: alpine:latest
+  stage: deploy
+  environment:
+    name: production
+    url: https://lnmt.example.com
+  before_script:
+    - apk add --no-cache curl
+  script:
+    - echo "Deploying to production environment..."
+    - curl -X POST "$PRODUCTION_DEPLOY_WEBHOOK" -H "Authorization: Bearer $DEPLOY_TOKEN"
+    - sleep 60  # Wait for deployment
+    - curl -f "$PRODUCTION_URL/health" || exit 1
+  only:
+    - tags
+  when: manual
+
+# Stage 7: Post-Deploy
+post_deploy:smoke_tests:
+  <<: *python_job
+  stage: post-deploy
+  script:
+    - |
+      if [[ "$CI_COMMIT_TAG" ]]; then
+        VERSION=$CI_COMMIT_TAG
+      else
+        VERSION=$CI_COMMIT_SHORT_SHA
+      fi
+    - chmod +x scripts/post_release_qa.sh
+    - scripts/post_release_qa.sh $VERSION
+  artifacts:
+    reports:
+      junit: smoke-test-results.xml
+  only:
+    - tags
+  when: on_success
+
+post_deploy:notify:
+  image: alpine:latest
+  stage: post-deploy
+  before_script:
+    - apk add --no-cache curl
+  script:
+    - |
+      if [[ "$CI_JOB_STATUS" == "success" ]]; then
+        MESSAGE="✅ LNMT $CI_COMMIT_TAG deployment successful!"
+      else
+        MESSAGE="❌ LNMT $CI_COMMIT_TAG deployment failed!"
+      fi
+    - |
+      curl -X POST "$SLACK_WEBHOOK_URL" \
+        -H 'Content-type: application/json' \
+        -d "{\"text\":\"$MESSAGE\"}"
+  when: always
+  only:
+    - tags
+
+# Release automation
+release:create:
+  <<: *python_job
+  stage: deploy
+  script:
+    - pip install python-gitlab
+    - |
+      VERSION=$CI_COMMIT_TAG
+      python scripts/generate_changelog.py $VERSION > RELEASE_NOTES.md
+    - |
+      python -c "
+      import gitlab
+      import os
+      gl = gitlab.Gitlab('$CI_SERVER_URL', private_token='$GITLAB_TOKEN')
+      project = gl.projects.get('$CI_PROJECT_ID')
+      
+      with open('RELEASE_NOTES.md', 'r') as f:
+          description = f.read()
+      
+      release = project.releases.create({
+          'name': 'LNMT $CI_COMMIT_TAG',
+          'tag_name': '$CI_COMMIT_TAG',
+          'description': description,
+          'assets': {
+              'links': [
+                  {
+                      'name': 'Installer Package',
+                      'url': '$CI_JOB_URL/artifacts/file/dist/lnmt-installer-$CI_COMMIT_TAG.tar.gz'
+                  },
+                  {
+                      'name': 'Source Bundle',
+                      'url': '$CI_JOB_URL/artifacts/file/dist/lnmt-$CI_COMMIT_TAG.tar.gz'
+                  }
+              ]
+          }
+      })
+      print(f'Release created: {release.web_url}')
+      "
+  dependencies:
+    - package:installer
+    - package:bundle
+  only:
+    - tags
+  when: manual
+
+# Cleanup jobs
+cleanup:old_artifacts:
+  image: alpine:latest
+  stage: post-deploy
+  script:
+    - echo "Cleaning up old artifacts..."
+    # Add cleanup logic here
+  when: manual
+  only:
+    - schedules
+
+# Pipeline rules
+workflow:
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_TAG
+    - if: $CI_MERGE_REQUEST_IID
+    - if: $CI_PIPELINE_SOURCE == "schedule"
