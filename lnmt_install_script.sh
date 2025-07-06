@@ -160,7 +160,7 @@ install_lnmt_files() {
     log_info "Installing LNMT files..."
     
     # Copy main database module
-    cp lnmt_db.py "$LNMT_HOME/"
+    cp lnmt-dual-db/core/lnmt_db.py "$LNMT_HOME/"
     
     # Create configuration files
     cat > "$LNMT_CONFIG_DIR/lnmt_db_config.json" << EOF
