@@ -30,7 +30,7 @@ except ImportError:
 class DatabaseConfig:
     """Configuration for dual database setup"""
     # SQLite (always present)
-    sqlite_path: str = "lnmt_config.db"
+    sqlite_path: str = "/opt/lnmt/lnmt_config.db"
     
     # SQL Database (optional)
     sql_enabled: bool = False
