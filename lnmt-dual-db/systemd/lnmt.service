@@ -1,0 +1,28 @@
+[Unit]
+Description=LNMT Database Management Service
+Documentation=https://github.com/lnmt/lnmt
+After=network.target mysql.service postgresql.service
+
+[Service]
+Type=simple
+User=lnmt
+Group=lnmt
+WorkingDirectory=/opt/lnmt
+Environment=PATH=/opt/lnmt/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ExecStart=/opt/lnmt/venv/bin/python /opt/lnmt/core/lnmt_db.py daemon
+ExecReload=/bin/kill -HUP $MAINPID
+KillMode=mixed
+Restart=always
+RestartSec=10
+TimeoutStartSec=60
+TimeoutStopSec=30
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/opt/lnmt /etc/lnmt /var/log/lnmt /var/lib/lnmt
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,15 @@
+{
+  "sqlite_path": "/etc/lnmt/lnmt_config.db",
+  "sql_enabled": false,
+  "sql_type": "postgres",
+  "sql_host": "localhost",
+  "sql_port": 5432,
+  "sql_database": "lnmt",
+  "sql_username": "lnmt_user",
+  "sql_password": "secure_password",
+  "sql_pool_size": 5,
+  "auto_sync": true,
+  "sync_interval": 300,
+  "backup_enabled": true,
+  "backup_retention_days": 30
+}

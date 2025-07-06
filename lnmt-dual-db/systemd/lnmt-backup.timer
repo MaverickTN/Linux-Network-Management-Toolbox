@@ -1,0 +1,11 @@
+[Unit]
+Description=Run LNMT backup daily
+Requires=lnmt-backup.service
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+RandomizedDelaySec=1800
+
+[Install]
+WantedBy=timers.target

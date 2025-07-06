@@ -1,0 +1,34 @@
+name: office_network
+description: Office network with VoIP priority
+interface: eth0
+qdiscs:
+  - handle: "1:"
+    parent: root
+    kind: htb
+    options: {default: "40"}
+classes:
+  - classid: "1:1"
+    parent: "1:"
+    kind: htb  
+    rate: "100mbit"
+    ceil: "100mbit"
+  - classid: "1:10"
+    parent: "1:1"
+    kind: htb
+    rate: "30mbit"
+    ceil: "50mbit"
+    prio: 1
+  - classid: "1:20"
+    parent: "1:1" 
+    kind: htb
+    rate: "50mbit"
+    ceil: "80mbit"
+    prio: 2
+filters:
+  - handle: "10:"
+    parent: "1:"
+    protocol: ip
+    prio: 1
+    kind: u32
+    match_criteria: {dst: "10.0.1.0/24"}
+    flowid: "1:10"

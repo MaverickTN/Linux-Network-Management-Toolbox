@@ -279,6 +279,8 @@ features:
   
 # Development Settings (ignored in production)
 development:
+  mode: "standalone"  # default, no nginx required
+  nginx_enabled: false
   auto_reload: true
   debug_toolbar: true
   profiling: false

@@ -1,0 +1,41 @@
+{
+  "name": "web_server_qos",
+  "description": "Basic web server traffic shaping",
+  "interface": "eth0",
+  "qdiscs": [
+    {
+      "handle": "1:",
+      "parent": "root", 
+      "kind": "htb",
+      "options": {"default": "30"}
+    }
+  ],
+  "classes": [
+    {
+      "classid": "1:1",
+      "parent": "1:",
+      "kind": "htb",
+      "rate": "100mbit",
+      "ceil": "100mbit"
+    },
+    {
+      "classid": "1:10", 
+      "parent": "1:1",
+      "kind": "htb",
+      "rate": "80mbit",
+      "ceil": "100mbit",
+      "prio": 1
+    }
+  ],
+  "filters": [
+    {
+      "handle": "1:",
+      "parent": "1:",
+      "protocol": "ip",
+      "prio": 1,
+      "kind": "u32",
+      "match_criteria": {"dport": 80},
+      "flowid": "1:10"
+    }
+  ]
+}

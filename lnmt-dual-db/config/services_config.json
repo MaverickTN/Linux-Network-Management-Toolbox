@@ -1,0 +1,35 @@
+{
+  "services": [
+    {
+      "name": "nginx",
+      "enabled": true,
+      "port": 80,
+      "ssl_port": 443,
+      "config_path": "/etc/nginx/nginx.conf",
+      "binary_path": "/usr/sbin/nginx",
+      "log_path": "/var/log/nginx",
+      "auto_start": true,
+      "dependencies": []
+    },
+    {
+      "name": "mysql",
+      "enabled": true,
+      "port": 3306,
+      "config_path": "/etc/mysql/my.cnf",
+      "binary_path": "/usr/bin/mysqld",
+      "log_path": "/var/log/mysql",
+      "auto_start": true,
+      "dependencies": []
+    },
+    {
+      "name": "php-fpm",
+      "enabled": true,
+      "port": 9000,
+      "config_path": "/etc/php/fpm/pool.d/www.conf",
+      "binary_path": "/usr/sbin/php-fpm",
+      "log_path": "/var/log/php-fpm",
+      "auto_start": true,
+      "dependencies": ["mysql"]
+    }
+  ]
+}

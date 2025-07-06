@@ -1,0 +1,13 @@
+[Unit]
+Description=LNMT Database Backup Service
+Documentation=https://github.com/lnmt/lnmt
+
+[Service]
+Type=oneshot
+User=lnmt
+Group=lnmt
+WorkingDirectory=/opt/lnmt
+Environment=PATH=/opt/lnmt/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ExecStart=/opt/lnmt/venv/bin/python /opt/lnmt/core/lnmt_db.py backup-auto
+StandardOutput=journal
+StandardError=journal
