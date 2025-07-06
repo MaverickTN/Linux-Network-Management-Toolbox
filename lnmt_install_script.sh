@@ -71,28 +71,22 @@ install_dependencies() {
             apt-get install -y python3 python3-pip python3-venv sqlite3 \
                               curl wget git htop iotop netstat-nat \
                               iptables-persistent fail2ban logrotate \
-                              nginx mysql-server redis-server \
-                              php-fpm php-mysql php-redis \
-                              postfix dovecot-core memcached \
+                              nginx redis-server memcached \
                               iproute2 tcpdump
             ;;
         "CentOS"*|"Red Hat"*|"Rocky"*)
             yum update -y
             yum install -y python3 python3-pip sqlite curl wget git \
                           htop iotop net-tools iptables-services \
-                          fail2ban logrotate nginx mysql-server \
-                          redis php-fpm php-mysql postfix \
-                          dovecot memcached iproute tcpdump
+                          fail2ban logrotate redis memcached \
+                          iproute tcpdump
             ;;
         "Debian"*)
             apt-get update
             apt-get install -y python3 python3-pip python3-venv sqlite3 \
                               curl wget git htop iotop net-tools \
                               iptables-persistent fail2ban logrotate \
-                              nginx mysql-server redis-server \
-                              php-fpm php-mysql php-redis \
-                              postfix dovecot-core memcached \
-                              iproute2 tcpdump
+                              redis-server memcached iproute2 tcpdump
             ;;
         *)
             log_error "Unsupported OS: $OS"
@@ -185,37 +179,6 @@ EOF
     cat > "$LNMT_CONFIG_DIR/lnmt_services.json" << EOF
 {
   "services": [
-    {
-      "name": "nginx",
-      "enabled": true,
-      "port": 80,
-      "ssl_port": 443,
-      "config_path": "/etc/nginx/nginx.conf",
-      "binary_path": "/usr/sbin/nginx",
-      "log_path": "/var/log/nginx",
-      "auto_start": true,
-      "dependencies": []
-    },
-    {
-      "name": "mysql",
-      "enabled": true,
-      "port": 3306,
-      "config_path": "/etc/mysql/my.cnf",
-      "binary_path": "/usr/bin/mysqld",
-      "log_path": "/var/log/mysql",
-      "auto_start": true,
-      "dependencies": []
-    },
-    {
-      "name": "php-fpm",
-      "enabled": true,
-      "port": 9000,
-      "config_path": "/etc/php/fpm/pool.d/www.conf",
-      "binary_path": "/usr/sbin/php-fpm",
-      "log_path": "/var/log/php-fpm",
-      "auto_start": true,
-      "dependencies": ["mysql"]
-    },
     {
       "name": "redis",
       "enabled": true,
